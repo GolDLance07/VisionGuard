@@ -20,6 +20,17 @@ def test_config():
     assert "knife" in data["unsafe_classes"]
 
 
+def test_update_config():
+    # Update detection threshold and verify
+    res = client.post("/api/config", json={"detection_confidence_threshold": 0.35})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["detection_confidence_threshold"] == 0.35
+
+    # Revert back to 0.25
+    client.post("/api/config", json={"detection_confidence_threshold": 0.25})
+
+
 def test_session_lifecycle():
     # Session start without params should fail 400
     res = client.post("/api/session/start", json={"source": "webcam"})

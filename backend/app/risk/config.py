@@ -66,3 +66,12 @@ def get_config() -> RiskConfig:
     if _config_instance is None:
         _config_instance = RiskConfig()
     return _config_instance
+
+
+def update_config(updates: dict) -> RiskConfig:
+    global _config_instance
+    cfg = get_config()
+    for k, v in updates.items():
+        if hasattr(cfg, k) and v is not None:
+            setattr(cfg, k, v)
+    return cfg

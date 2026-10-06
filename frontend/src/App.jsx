@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { VideoPanel } from './components/VideoPanel'
 import { RiskPanel } from './components/RiskPanel'
 import { ObjectsList } from './components/ObjectsList'
 import { WarningPanel } from './components/WarningPanel'
 import { Controls } from './components/Controls'
+import { SettingsModal } from './components/SettingsModal'
+import { IncidentHistory } from './components/IncidentHistory'
 import { useDetectionWebSocket } from './hooks/useDetectionWebSocket'
 
 function App() {
@@ -12,15 +14,58 @@ function App() {
   const [deviceIndex, setDeviceIndex] = useState(0)
   const [fileRef, setFileRef] = useState(null)
   const [soundEnabled, setSoundEnabled] = useState(true)
+  const [voiceEnabled, setVoiceEnabled] = useState(true)
   const [config, setConfig] = useState(null)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isStarting, setIsStarting] = useState(false)
   const [apiError, setApiError] = useState(null)
+  const [incidents, setIncidents] = useState([])
+
+  const lastIncidentTimeRef = useRef(0)
 
   const {
     latestFrame,
     connectionStatus,
     errorMessage: wsErrorMessage,
   } = useDetectionWebSocket(sessionId)
+
+  // Record HIGH-risk incident snapshots
+  useEffect(() => {
+    if (!latestFrame || latestFrame.risk_level !== 'HIGH') return
+
+    const now = Date.now()
+    if (now - lastIncidentTimeRef.current > 3500) {
+      lastIncidentTimeRef.current = now
+
+      const timeStr = new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+
+      const unsafe = latestFrame.objects?.filter(
+        (o) => (config?.unsafe_classes || ['knife', 'scissors', 'gun']).includes(o.class_name)
+      ) || []
+
+      const primaryReason =
+        latestFrame.reasons?.find((r) => r.rule !== 'persistence')?.details ||
+        'Potential Security Risk'
+
+      const newIncident = {
+        id: `inc-${now}`,
+        timestamp: now,
+        timeStr,
+        riskScore: latestFrame.risk_score,
+        riskLevel: latestFrame.risk_level,
+        primaryReason,
+        reasons: latestFrame.reasons || [],
+        frame: latestFrame.frame,
+        detectedClasses: [...new Set(unsafe.map((o) => o.class_name))],
+      }
+
+      setIncidents((prev) => [newIncident, ...prev].slice(0, 30))
+    }
+  }, [latestFrame, config])
 
   const startSession = useCallback(async () => {
     setIsStarting(true)
@@ -82,7 +127,7 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Top Header */}
-      <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-50">
+      <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20 font-black text-white text-base">
@@ -96,12 +141,21 @@ function App() {
                 </span>
               </h1>
               <p className="text-[11px] text-slate-400">
-                Real-Time Visual Safety Monitoring & Risk Persistence Engine
+                Real-Time Visual Safety Monitoring & Threat Detection Engine
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+              title="Configure Detection & Risk Thresholds"
+            >
+              <span>⚙️</span>
+              <span>Live Settings</span>
+            </button>
+
             <span
               className={`px-3 py-1 rounded-full text-xs font-semibold border flex items-center gap-1.5 transition-all ${
                 connectionStatus === 'connected'
@@ -128,9 +182,25 @@ function App() {
             </span>
 
             <button
+              onClick={() => setVoiceEnabled((prev) => !prev)}
+              className={`p-1.5 rounded-lg border text-sm transition-colors ${
+                voiceEnabled
+                  ? 'bg-blue-900/60 border-blue-700 text-blue-200'
+                  : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
+              }`}
+              title={voiceEnabled ? 'Mute Voice Alerts' : 'Enable Voice Alerts'}
+            >
+              {voiceEnabled ? '🗣️' : '🔇'}
+            </button>
+
+            <button
               onClick={() => setSoundEnabled((prev) => !prev)}
-              className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 text-sm transition-colors"
-              title={soundEnabled ? 'Mute Alert Sound' : 'Unmute Alert Sound'}
+              className={`p-1.5 rounded-lg border text-sm transition-colors ${
+                soundEnabled
+                  ? 'bg-slate-800 border-slate-700 text-slate-200'
+                  : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
+              }`}
+              title={soundEnabled ? 'Mute Chime Alerts' : 'Enable Chime Alerts'}
             >
               {soundEnabled ? '🔔' : '🔕'}
             </button>
@@ -164,14 +234,22 @@ function App() {
               frame={latestFrame}
               errorMessage={wsErrorMessage}
               soundEnabled={soundEnabled}
+              voiceEnabled={voiceEnabled}
               onToggleSound={() => setSoundEnabled((prev) => !prev)}
+              onToggleVoice={() => setVoiceEnabled((prev) => !prev)}
               unsafeClasses={config?.unsafe_classes || []}
             />
 
-            <ObjectsList
-              objects={latestFrame?.objects || []}
-              unsafeClasses={config?.unsafe_classes || []}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <ObjectsList
+                objects={latestFrame?.objects || []}
+                unsafeClasses={config?.unsafe_classes || []}
+              />
+              <IncidentHistory
+                incidents={incidents}
+                onClear={() => setIncidents([])}
+              />
+            </div>
           </div>
 
           {/* Right Column: Risk Evaluation, Warnings & Session Controls */}
@@ -197,9 +275,17 @@ function App() {
         </div>
       </main>
 
+      {/* Live Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        config={config}
+        onConfigSaved={(updated) => setConfig(updated)}
+      />
+
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 py-3 text-center text-xs text-slate-600">
-        Vision Guard V1 &bull; YOLOv8 Visual Inference &bull; Rule-Based Risk Engine &bull; Observability Only
+        Vision Guard V1 &bull; Real-time YOLOv8 &bull; Rule-Based Risk Engine &bull; Automated Voice Callouts
       </footer>
     </div>
   )

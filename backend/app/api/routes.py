@@ -80,6 +80,29 @@ async def stop_session(req: Request, body: SessionStopRequest | None = None, ses
     return {"status": "stopped"}
 
 
+from app.risk.config import RiskConfig, get_config, update_config
+
+
+class ConfigUpdateRequest(BaseModel):
+    detection_confidence_threshold: float | None = None
+    unsafe_classes: list[str] | None = None
+    frame_skip: int | None = None
+    speed_thresholds: dict[str, float] | None = None
+    proximity_thresholds: dict[str, float] | None = None
+    score_weights: dict[str, float] | None = None
+    persistence_window: int | None = None
+    min_persistence_duration: float | None = None
+    low_confidence_threshold: float | None = None
+    audio_alert_enabled: bool | None = None
+
+
 @router.get("/config", response_model=ConfigResponse)
-async def get_config():
-    return RiskConfig().to_response()
+async def read_config():
+    return get_config().to_response()
+
+
+@router.post("/config", response_model=ConfigResponse)
+async def update_configuration(updates: ConfigUpdateRequest):
+    data = updates.model_dump(exclude_unset=True)
+    updated = update_config(data)
+    return updated.to_response()
