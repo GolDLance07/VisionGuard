@@ -43,9 +43,22 @@ function App() {
         second: '2-digit',
       })
 
-      const unsafe = latestFrame.objects?.filter(
-        (o) => (config?.unsafe_classes || ['knife', 'scissors', 'gun']).includes(o.class_name)
-      ) || []
+      const unsafe =
+        latestFrame.objects?.filter((o) =>
+          (config?.unsafe_classes || ['knife', 'scissors', 'gun']).includes(o.class_name)
+        ) || []
+
+      const getCategory = (cls, cat) => {
+        if (cat && cat !== 'Object') return cat
+        const l = (cls || '').toLowerCase()
+        if (['knife', 'scissors', 'blade', 'dagger', 'sword', 'box cutter', 'machete'].includes(l)) return 'Sharp Object'
+        if (['gun', 'pistol', 'rifle', 'handgun', 'shotgun', 'weapon', 'firearm'].includes(l)) return 'Firearm'
+        if (['baseball bat', 'bat', 'crowbar', 'pipe'].includes(l)) return 'Blunt Weapon'
+        return 'Hazardous Object'
+      }
+
+      const categories = [...new Set(unsafe.map((o) => getCategory(o.class_name, o.category)))]
+      const hazardTitle = categories.length > 0 ? `${categories.join(' & ')} Detected` : 'Safety Risk Threshold Exceeded'
 
       const primaryReason =
         latestFrame.reasons?.find((r) => r.rule !== 'persistence')?.details ||
@@ -57,10 +70,11 @@ function App() {
         timeStr,
         riskScore: latestFrame.risk_score,
         riskLevel: latestFrame.risk_level,
+        title: hazardTitle,
         primaryReason,
         reasons: latestFrame.reasons || [],
         frame: latestFrame.frame,
-        detectedClasses: [...new Set(unsafe.map((o) => o.class_name))],
+        detectedClasses: unsafe.map((o) => `${o.class_name} (${(o.confidence * 100).toFixed(0)}%)`),
       }
 
       setIncidents((prev) => [newIncident, ...prev].slice(0, 30))

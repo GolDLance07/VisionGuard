@@ -54,12 +54,15 @@ export function IncidentHistory({ incidents = [], onClear }) {
 
               {/* Incident Details */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-0.5">
-                  <span className="font-bold text-red-300 text-xs truncate">
-                    {inc.primaryReason || 'Safety Threshold Exceeded'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">
-                    {inc.timeStr}
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-red-400 text-xs">⚠️</span>
+                    <span className="font-bold text-red-200 text-xs truncate">
+                      {inc.title || inc.primaryReason || 'Safety Hazard Detected'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-300 font-mono shrink-0 ml-2 bg-slate-800/90 px-2 py-0.5 rounded border border-slate-700/60 font-semibold">
+                    🕒 {inc.timeStr}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-[11px] text-slate-400">
@@ -68,10 +71,15 @@ export function IncidentHistory({ incidents = [], onClear }) {
                   </span>
                   {inc.detectedClasses?.length > 0 && (
                     <span className="truncate text-slate-400">
-                      &bull; Objects: <span className="text-slate-200">{inc.detectedClasses.join(', ')}</span>
+                      &bull; <span className="text-red-300 font-medium">{inc.detectedClasses.join(', ')}</span>
                     </span>
                   )}
                 </div>
+                {inc.primaryReason && inc.title && (
+                  <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                    {inc.primaryReason}
+                  </div>
+                )}
               </div>
 
               <span className="text-slate-600 group-hover:text-slate-300 text-xs">
@@ -90,10 +98,10 @@ export function IncidentHistory({ incidents = [], onClear }) {
               <div>
                 <h4 className="font-bold text-white text-base flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
-                  Incident Evidence Frame
+                  {selectedIncident.title || 'Incident Evidence Frame'}
                 </h4>
-                <p className="text-xs text-slate-400">
-                  Captured at {selectedIncident.timeStr} &bull; Peak Score: {(selectedIncident.riskScore * 100).toFixed(1)}%
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Detected at <strong className="text-white font-mono">{selectedIncident.timeStr}</strong> &bull; Peak Score: {(selectedIncident.riskScore * 100).toFixed(1)}%
                 </p>
               </div>
               <button
@@ -111,6 +119,15 @@ export function IncidentHistory({ incidents = [], onClear }) {
                   alt="Full incident frame"
                   className="w-full h-full object-contain"
                 />
+              </div>
+            )}
+
+            {selectedIncident.detectedClasses?.length > 0 && (
+              <div className="bg-red-950/40 border border-red-900/60 p-2.5 rounded-lg text-xs flex items-center justify-between">
+                <span className="text-red-300 font-semibold flex items-center gap-1.5">
+                  <span>⚠️</span> Detected Hazard(s):
+                </span>
+                <span className="text-red-200 font-mono font-bold">{selectedIncident.detectedClasses.join(', ')}</span>
               </div>
             )}
 
