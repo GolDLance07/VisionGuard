@@ -84,6 +84,7 @@ from app.risk.config import RiskConfig, get_config, update_config
 
 
 class ConfigUpdateRequest(BaseModel):
+    model_path: str | None = None
     detection_confidence_threshold: float | None = None
     unsafe_classes: list[str] | None = None
     frame_skip: int | None = None

@@ -5,7 +5,7 @@ Rules receive objects, movement, and an optional relationships dict.
 """
 import math
 from collections import deque
-from app.schemas.detection import DetectedObject, RiskReason
+from app.schemas.detection import DetectedObject, RiskReason, get_hazard_category
 from app.risk.config import get_config
 
 
@@ -14,7 +14,7 @@ def rule_unsafe_object(
     movement: dict,
     relationships: dict | None = None,
 ) -> tuple[float, RiskReason | None]:
-    """Detect unsafe objects (weapons, knives, etc.)."""
+    """Detect unsafe objects (weapons, knives, etc.) classified by hazard category."""
     config = get_config()
     unsafe_detected = [o for o in objects if o.class_name in config.unsafe_classes]
 
@@ -22,14 +22,16 @@ def rule_unsafe_object(
         return 0.0, None
 
     max_conf = max(o.confidence for o in unsafe_detected)
-    names = ", ".join(o.class_name for o in unsafe_detected)
+    categories = list({getattr(o, "category", None) or get_hazard_category(o.class_name) for o in unsafe_detected})
+    cat_title = categories[0] if len(categories) == 1 else "Hazardous Object"
+    names = ", ".join(f"{o.class_name} ({o.confidence:.2f})" for o in unsafe_detected)
 
     if max_conf < config.low_confidence_threshold:
         score = max_conf * 0.5
-        reason = f"LOW CONFIDENCE: {names} ({max_conf:.2f})"
+        reason = f"LOW CONFIDENCE: {cat_title} [{names}]"
     else:
         score = max_conf
-        reason = f"Unsafe object detected: {names} ({max_conf:.2f})"
+        reason = f"{cat_title} detected: {names}"
 
     return min(score, 1.0), RiskReason(
         rule="unsafe_object", score=min(score, 1.0), details=reason

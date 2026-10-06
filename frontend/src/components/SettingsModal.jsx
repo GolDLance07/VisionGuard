@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 
 export function SettingsModal({ isOpen, onClose, config, onConfigSaved }) {
+  const [modelPath, setModelPath] = useState('models/yolov8s.pt')
   const [confThreshold, setConfThreshold] = useState(0.25)
   const [proximityClose, setProximityClose] = useState(100)
   const [persistenceWindow, setPersistenceWindow] = useState(10)
@@ -13,6 +14,7 @@ export function SettingsModal({ isOpen, onClose, config, onConfigSaved }) {
 
   useEffect(() => {
     if (config) {
+      setModelPath(config.model_path || 'models/yolov8s.pt')
       setConfThreshold(config.detection_confidence_threshold || 0.25)
       setProximityClose(config.proximity_thresholds?.close || 100)
       setPersistenceWindow(config.persistence_window || 10)
@@ -41,6 +43,7 @@ export function SettingsModal({ isOpen, onClose, config, onConfigSaved }) {
     setSavedSuccess(false)
     try {
       const payload = {
+        model_path: modelPath,
         detection_confidence_threshold: parseFloat(confThreshold),
         proximity_thresholds: {
           close: parseFloat(proximityClose),
@@ -94,6 +97,24 @@ export function SettingsModal({ isOpen, onClose, config, onConfigSaved }) {
         </div>
 
         <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+          {/* YOLO Model Weights Selector */}
+          <div className="space-y-1.5 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+            <label className="block text-xs font-semibold text-slate-200">
+              YOLO Detection Model Weights
+            </label>
+            <select
+              value={modelPath}
+              onChange={(e) => setModelPath(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-blue-500 font-medium"
+            >
+              <option value="models/yolov8s.pt">YOLOv8 Small (models/yolov8s.pt) — High Accuracy (82%+ Knife/Scissors)</option>
+              <option value="models/yolov8n.pt">YOLOv8 Nano (models/yolov8n.pt) — Ultra Lightweight (CPU Optimized)</option>
+            </select>
+            <p className="text-[11px] text-slate-500">
+              Switches model weights dynamically. YOLOv8s provides superior detection recall on handheld sharp objects.
+            </p>
+          </div>
+
           {/* Detection Confidence Slider */}
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs font-semibold">

@@ -5,7 +5,7 @@ import numpy as np
 from ultralytics import YOLO
 
 from app.risk.config import get_config
-from app.schemas.detection import DetectedObject, BoundingBox
+from app.schemas.detection import DetectedObject, BoundingBox, get_hazard_category
 
 
 class Tracker:
@@ -49,7 +49,8 @@ class Tracker:
                 id=int(track_id),
                 class_name=class_name,
                 confidence=confidence,
-                bbox=BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2)
+                bbox=BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2),
+                category=get_hazard_category(class_name),
             ))
 
             # Reset age for seen tracks

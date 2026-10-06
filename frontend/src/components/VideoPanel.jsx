@@ -43,6 +43,22 @@ export function VideoPanel({
     }
   }, [frame, soundEnabled])
 
+  // Helper to map specific class names to high-level security categories
+  const getHazardCategory = (className, category) => {
+    if (category && category !== 'Object') return category
+    const lower = (className || '').toLowerCase()
+    if (['knife', 'scissors', 'blade', 'dagger', 'sword', 'box cutter', 'machete'].includes(lower)) {
+      return 'Sharp object'
+    }
+    if (['gun', 'pistol', 'rifle', 'handgun', 'shotgun', 'weapon', 'firearm'].includes(lower)) {
+      return 'Firearm'
+    }
+    if (['baseball bat', 'bat', 'crowbar', 'pipe'].includes(lower)) {
+      return 'Blunt weapon'
+    }
+    return 'Hazardous object'
+  }
+
   // SpeechSynthesis Voice Announcements when an unsafe object is detected
   useEffect(() => {
     if (!frame || !voiceEnabled || !window.speechSynthesis) return
@@ -54,13 +70,14 @@ export function VideoPanel({
 
     if (detectedUnsafe.length > 0) {
       detectedUnsafe.forEach((obj) => {
-        const lastSpoken = lastVoiceTimeRef.current[obj.class_name] || 0
+        const categoryName = getHazardCategory(obj.class_name, obj.category)
+        const lastSpoken = lastVoiceTimeRef.current[categoryName] || 0
         if (now - lastSpoken > 3500) {
-          lastVoiceTimeRef.current[obj.class_name] = now
+          lastVoiceTimeRef.current[categoryName] = now
           try {
             // Cancel pending speech to avoid queuing delays
             window.speechSynthesis.cancel()
-            const phrase = `Warning. ${obj.class_name} detected.`
+            const phrase = `Warning. ${categoryName} detected.`
             const utterance = new SpeechSynthesisUtterance(phrase)
             utterance.rate = 1.05
             utterance.pitch = 1.0
@@ -368,10 +385,16 @@ export function VideoPanel({
 
         {/* Real-time Detected Object Callout Banner */}
         {topHazard && (
-          <div className="absolute top-12 left-4 bg-red-950/90 border border-red-500/80 text-white py-1 px-3 rounded-lg shadow-xl text-xs font-bold flex items-center gap-2 backdrop-blur-md animate-pulse">
+          <div className="absolute top-12 left-4 bg-red-950/90 border border-red-500/80 text-white py-1.5 px-3.5 rounded-lg shadow-xl text-xs font-bold flex items-center gap-2 backdrop-blur-md animate-pulse">
             <span className="text-base">⚠️</span>
             <span>
-              HAZARD DETECTED: <span className="uppercase text-red-300">{topHazard.class_name}</span> ({(topHazard.confidence * 100).toFixed(0)}%)
+              HAZARD DETECTED:{' '}
+              <span className="uppercase text-red-300 font-extrabold">
+                {getHazardCategory(topHazard.class_name, topHazard.category)}
+              </span>{' '}
+              <span className="text-slate-400 font-normal">
+                ({topHazard.class_name}, {(topHazard.confidence * 100).toFixed(0)}%)
+              </span>
             </span>
           </div>
         )}

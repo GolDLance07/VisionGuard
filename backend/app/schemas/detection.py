@@ -21,6 +21,31 @@ class BoundingBox(BaseModel):
     y2: float = Field(..., ge=0)
 
 
+HAZARD_CATEGORIES: dict[str, str] = {
+    "knife": "Sharp Object",
+    "scissors": "Sharp Object",
+    "blade": "Sharp Object",
+    "dagger": "Sharp Object",
+    "sword": "Sharp Object",
+    "box cutter": "Sharp Object",
+    "machete": "Sharp Object",
+    "gun": "Firearm",
+    "pistol": "Firearm",
+    "rifle": "Firearm",
+    "handgun": "Firearm",
+    "shotgun": "Firearm",
+    "weapon": "Firearm",
+    "baseball bat": "Blunt Weapon",
+    "bat": "Blunt Weapon",
+    "crowbar": "Blunt Weapon",
+    "person": "Person",
+}
+
+
+def get_hazard_category(class_name: str) -> str:
+    return HAZARD_CATEGORIES.get(class_name.lower(), "Hazardous Object")
+
+
 class DetectedObject(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -28,6 +53,7 @@ class DetectedObject(BaseModel):
     class_name: str = Field(alias="class")
     confidence: float = Field(..., ge=0, le=1)
     bbox: BoundingBox
+    category: str = "Object"
     # Optional movement data (added in M2)
     speed: float = 0.0
     direction: float = 0.0
