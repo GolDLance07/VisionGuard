@@ -1,0 +1,42 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node & Frontend dependencies & builds
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+.npm/
+
+# Model weights & large datasets (per AGENTS.md)
+*.pt
+*.pth
+*.onnx
+data/
+uploads/
+backend/uploads/
+
+# Environment & OS files
+.env
+.env.*
+.DS_Store
+Thumbs.db
+desktop.ini
+tmp.b64
+opencode.json
