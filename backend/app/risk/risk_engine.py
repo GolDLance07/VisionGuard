@@ -107,20 +107,24 @@ class RiskEngine:
             if reason:
                 rule_results.append((score, reason))
 
-        # Weighted aggregation
+        # Weighted aggregation with live configuration snapshot (Context1.md #5)
+        config = get_config()
+        weights = config.score_weights
+        cutoffs = config.risk_cutoffs
+
         total_score = 0.0
         reasons = []
         for score, reason in rule_results:
-            weight = self.weights.get(reason.rule, 0.0)
+            weight = weights.get(reason.rule, 0.0)
             total_score += score * weight
             reasons.append(reason)
 
         total_score = min(max(total_score, 0.0), 1.0)
 
         # Classify level
-        if total_score <= self.cutoffs["low_max"]:
+        if total_score <= cutoffs["low_max"]:
             level = RiskLevel.LOW
-        elif total_score <= self.cutoffs["medium_max"]:
+        elif total_score <= cutoffs["medium_max"]:
             level = RiskLevel.MEDIUM
         else:
             level = RiskLevel.HIGH

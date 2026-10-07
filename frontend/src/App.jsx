@@ -135,15 +135,24 @@ function App() {
   }, [latestFrame, config])
 
   // Start Session API call
-  const startSession = useCallback(async () => {
+  const startSession = useCallback(async (overrideSource, overrideFileRef) => {
     setIsStarting(true)
     setApiError(null)
 
     try {
+      const activeSource = (typeof overrideSource === 'string' ? overrideSource : null) || source
+      const activeFileRef = (typeof overrideFileRef === 'string' ? overrideFileRef : null) || fileRef
+      if (overrideSource && typeof overrideSource === 'string') {
+        setSource(overrideSource)
+      }
+      if (overrideFileRef && typeof overrideFileRef === 'string') {
+        setFileRef(overrideFileRef)
+      }
+
       const payload = {
-        source,
-        device_index: source === 'webcam' ? deviceIndex : undefined,
-        file_ref: source === 'upload' ? fileRef : undefined,
+        source: activeSource,
+        device_index: activeSource === 'webcam' ? (deviceIndex ?? 0) : undefined,
+        file_ref: activeSource === 'upload' ? activeFileRef : undefined,
       }
 
       const res = await fetch('/api/session/start', {

@@ -512,7 +512,7 @@ export function VideoPanel({
               <button
                 onClick={() => {
                   setSource('webcam')
-                  onStartSession()
+                  onStartSession('webcam')
                 }}
                 disabled={isStarting}
                 className="h-9 px-space-md rounded-lg bg-primary-container hover:bg-primary text-on-primary-container font-semibold text-xs inline-flex items-center gap-space-xs transition-all shadow-sm"
@@ -526,7 +526,7 @@ export function VideoPanel({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="video/mp4,video/avi,video/mov,video/x-matroska,video/webm"
+                accept="video/*,.mp4,.avi,.mov,.mkv,.webm,.m4v"
                 onChange={handleFileUpload}
                 className="hidden"
               />
@@ -546,7 +546,10 @@ export function VideoPanel({
 
               {fileRef && (
                 <button
-                  onClick={onStartSession}
+                  onClick={() => {
+                    setSource('upload')
+                    onStartSession('upload', fileRef)
+                  }}
                   disabled={isStarting}
                   className="h-9 px-space-md rounded-lg bg-secondary-container hover:bg-secondary text-on-secondary-container font-semibold text-xs inline-flex items-center gap-space-xs transition-all shadow-sm"
                   type="button"

@@ -96,6 +96,25 @@ class TestRiskRules:
         assert reason is not None
         assert "multiple people" in reason.details.lower()
 
+    def test_holding_weapon(self):
+        from app.risk.rules import rule_holding_weapon
+        person = self.make_obj(1, "person", 0.95, 100, 100, 200, 300)
+        # Knife overlapping person's hand region
+        knife = self.make_obj(2, "knife", 0.90, 160, 200, 190, 240)
+        score, reason = rule_holding_weapon([person, knife], {})
+        assert score == 1.0
+        assert reason is not None
+        assert reason.rule == "holding_weapon"
+
+    def test_knife_on_table_low_holding(self):
+        from app.risk.rules import rule_holding_weapon
+        person = self.make_obj(1, "person", 0.95, 100, 100, 200, 300)
+        # Knife far on table
+        knife = self.make_obj(2, "knife", 0.90, 400, 400, 450, 450)
+        score, reason = rule_holding_weapon([person, knife], {})
+        assert score == 0.0
+        assert reason is None
+
 
 class TestRiskEngine:
     def make_obj(self, id: int, class_name: str, conf: float, x1: float, y1: float, x2: float, y2: float):
@@ -139,6 +158,31 @@ class TestRiskEngine:
 
         # After persistence window, should be HIGH
         assert frame.risk_level == RiskLevel.HIGH
+
+    def test_person_holding_knife_stationary_reaches_high_risk(self):
+        """Context1.md P0: Person holding weapon must score >= 0.70 (HIGH) even when stationary."""
+        engine = RiskEngine()
+        objects = [
+            self.make_obj(1, "person", 0.95, 100, 100, 200, 300),
+            self.make_obj(2, "knife", 0.95, 160, 200, 190, 240),  # Held in person bbox
+        ]
+        movement = {
+            1: {"speed": 0.0, "velocity": (0, 0), "direction": 0, "displacement": 0},
+            2: {"speed": 0.0, "velocity": (0, 0), "direction": 0, "displacement": 0},
+        }
+
+        # Frame 1: score should already be >= 0.70
+        frame1 = engine.evaluate(objects, movement, 1000.0)
+        assert frame1.risk_score >= 0.70
+
+        # After persistence window, risk_level should become HIGH
+        for i in range(15):
+            frame = engine.evaluate(objects, movement, 1000.0 + i * 0.1)
+
+        assert frame.risk_level == RiskLevel.HIGH
+        rule_names = [r.rule for r in frame.reasons]
+        assert "holding_weapon" in rule_names
+        assert "unsafe_object" in rule_names
 
 
 class TestSchemas:

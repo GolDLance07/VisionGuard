@@ -32,11 +32,12 @@ class RiskConfig(BaseModel):
     # Risk scoring weights (must sum to 1.0)
     score_weights: dict[str, float] = {
         "unsafe_object": 0.40,
-        "proximity": 0.20,
-        "speed": 0.15,
-        "distance_trend": 0.10,
-        "direction_change": 0.10,
-        "multiple_people": 0.05,
+        "holding_weapon": 0.25,
+        "proximity": 0.15,
+        "speed": 0.08,
+        "distance_trend": 0.04,
+        "direction_change": 0.04,
+        "multiple_people": 0.04,
     }
 
     # Risk level cutoffs
@@ -73,5 +74,9 @@ def update_config(updates: dict) -> RiskConfig:
     cfg = get_config()
     for k, v in updates.items():
         if hasattr(cfg, k) and v is not None:
-            setattr(cfg, k, v)
+            curr = getattr(cfg, k)
+            if isinstance(curr, dict) and isinstance(v, dict):
+                curr.update(v)
+            else:
+                setattr(cfg, k, v)
     return cfg

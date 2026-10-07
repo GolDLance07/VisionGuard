@@ -38,6 +38,75 @@ def rule_unsafe_object(
     )
 
 
+def rule_holding_weapon(
+    objects: list[DetectedObject],
+    movement: dict,
+    relationships: dict | None = None,
+) -> tuple[float, RiskReason | None]:
+    """Check if an unsafe object is being held or brandished by a person (Context1.md #2, #11, #12)."""
+    config = get_config()
+    people = [o for o in objects if o.class_name == "person"]
+    unsafe = [o for o in objects if o.class_name in config.unsafe_classes]
+
+    if not people or not unsafe:
+        return 0.0, None
+
+    max_holding_score = 0.0
+    holding_details = None
+
+    for person in people:
+        p_box = person.bbox
+        for weapon in unsafe:
+            w_box = weapon.bbox
+
+            # Intersection / overlap
+            x_left = max(p_box.x1, w_box.x1)
+            y_top = max(p_box.y1, w_box.y1)
+            x_right = min(p_box.x2, w_box.x2)
+            y_bottom = min(p_box.y2, w_box.y2)
+
+            overlap_w = max(0.0, x_right - x_left)
+            overlap_h = max(0.0, y_bottom - y_top)
+            overlap_area = overlap_w * overlap_h
+
+            weapon_area = max(1.0, (w_box.x2 - w_box.x1) * (w_box.y2 - w_box.y1))
+            overlap_ratio = overlap_area / weapon_area
+
+            # Bounding box edge distance
+            dx = max(0.0, max(p_box.x1 - w_box.x2, w_box.x1 - p_box.x2))
+            dy = max(0.0, max(p_box.y1 - w_box.y2, w_box.y1 - p_box.y2))
+            edge_dist = math.hypot(dx, dy)
+
+            # Center distance relative to person height
+            p_height = max(1.0, p_box.y2 - p_box.y1)
+            p_cx, p_cy = (p_box.x1 + p_box.x2) / 2, (p_box.y1 + p_box.y2) / 2
+            w_cx, w_cy = (w_box.x1 + w_box.x2) / 2, (w_box.y1 + w_box.y2) / 2
+            center_dist = math.hypot(p_cx - w_cx, p_cy - w_cy)
+
+            # Hand/body association score
+            score = 0.0
+            if overlap_ratio >= 0.35 or edge_dist == 0.0:
+                score = 1.0
+            elif edge_dist < 25.0:
+                score = max(0.5, 1.0 - (edge_dist / 25.0))
+            elif center_dist < p_height * 0.45:
+                score = 0.75
+
+            if score > max_holding_score:
+                max_holding_score = score
+                cat = getattr(weapon, "category", None) or get_hazard_category(weapon.class_name)
+                holding_details = f"Weapon ({cat}) held or brandished in hand by person {person.id}"
+
+    if max_holding_score <= 0.0:
+        return 0.0, None
+
+    return max_holding_score, RiskReason(
+        rule="holding_weapon",
+        score=max_holding_score,
+        details=holding_details or "Weapon held by person",
+    )
+
+
 def rule_proximity(
     objects: list[DetectedObject],
     movement: dict,
@@ -171,31 +240,40 @@ def rule_direction_change(
     movement: dict,
     relationships: dict | None = None,
 ) -> tuple[float, RiskReason | None]:
-    """Check for sudden direction changes (erratic movement)."""
-    directions = []
+    """Check for sudden direction changes per tracked person over time (Context1.md #9)."""
+    max_variance = 0.0
+    erratic_obj = None
+
     for obj in objects:
         if obj.id in movement:
-            directions.append(movement[obj.id]["direction"])
+            m = movement[obj.id]
+            # Use temporal heading variance per object if available
+            var = m.get("direction_variance")
+            if var is not None and var > max_variance:
+                max_variance = var
+                erratic_obj = obj
 
-    if len(directions) < 2:
+    # Fallback to multi-object spread only if temporal variance not populated
+    if max_variance == 0.0:
+        directions = [movement[o.id]["direction"] for o in objects if o.id in movement and "direction" in movement[o.id]]
+        if len(directions) >= 2:
+            max_variance = max(directions) - min(directions)
+
+    if max_variance < 30.0:
         return 0.0, None
 
-    dir_range = max(directions) - min(directions)
-    score = min(dir_range / 180.0, 1.0)
-
-    if score < 0.1:
-        return 0.0, None
-
+    score = min(max_variance / 180.0, 1.0)
     return score, RiskReason(
         rule="direction_change",
         score=score,
-        details=f"Erratic movement: {dir_range:.1f}° variance",
+        details=f"Erratic direction change: {max_variance:.1f}° variance",
     )
 
 
 # Registry of all rules (order matters for readability in reasons list)
 RULES = [
     rule_unsafe_object,
+    rule_holding_weapon,
     rule_proximity,
     rule_distance_trend,
     rule_person_person,

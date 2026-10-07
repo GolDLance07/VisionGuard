@@ -19,9 +19,31 @@ UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
+ALLOWED_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
+ALLOWED_MIME_TYPES = {
+    "video/mp4",
+    "video/avi",
+    "video/x-msvideo",
+    "video/mov",
+    "video/quicktime",
+    "video/x-matroska",
+    "video/webm",
+    "application/octet-stream",  # Windows browser fallback
+}
+
+ALLOWED_MODELS = {
+    "yolov8n": "models/yolov8n.pt",
+    "yolov8s": "models/yolov8s.pt",
+    "yolov8n.pt": "models/yolov8n.pt",
+    "yolov8s.pt": "models/yolov8s.pt",
+    "models/yolov8n.pt": "models/yolov8n.pt",
+    "models/yolov8s.pt": "models/yolov8s.pt",
+}
+
+
 class SessionStartRequest(BaseModel):
     source: str = Field(..., pattern="^(webcam|upload)$")
-    device_index: int | None = Field(default=None, ge=0)
+    device_index: int | None = None
     file_ref: str | None = None
 
 
@@ -32,18 +54,29 @@ class SessionStartResponse(BaseModel):
 
 @router.post("/session/upload")
 async def upload_video(file: UploadFile = File(...)):
-    """Upload a video file and return a file_ref for use with /session/start."""
-    allowed_types = {"video/mp4", "video/avi", "video/mov", "video/x-matroska", "video/webm"}
-    if file.content_type and file.content_type not in allowed_types:
-        raise HTTPException(400, f"Unsupported file type: {file.content_type}")
+    """Upload a video file securely and return a file_ref for use with /session/start."""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    content_type = (file.content_type or "").lower()
 
-    safe_name = os.path.basename(file.filename or "upload.mp4")
+    if ext not in ALLOWED_EXTENSIONS and content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(400, f"Unsupported file type: {content_type} ({ext})")
+
+    import uuid
+    clean_base = os.path.basename(file.filename or "upload.mp4").replace(" ", "_")
+    safe_name = f"{uuid.uuid4().hex[:12]}_{clean_base}"
     dest = os.path.join(UPLOAD_DIR, safe_name)
+
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    logger.info(f"Video uploaded: {dest}")
-    return {"file_ref": dest, "filename": safe_name}
+    file_size = os.path.getsize(dest)
+    if file_size < 10:
+        if os.path.exists(dest):
+            os.remove(dest)
+        raise HTTPException(400, "Uploaded file is empty or corrupted")
+
+    logger.info(f"Video uploaded: {dest} ({file_size} bytes)")
+    return {"file_ref": dest, "filename": file.filename or clean_base}
 
 
 @router.post("/session/start", response_model=SessionStartResponse)
@@ -80,14 +113,50 @@ async def stop_session(req: Request, body: SessionStopRequest | None = None, ses
     return {"status": "stopped"}
 
 
+# Forensic incident records (Context1.md #18)
+_INCIDENTS_STORE: list[dict] = []
+
+
+class IncidentRecord(BaseModel):
+    id: str | None = None
+    timestamp: float | None = None
+    timeStr: str | None = None
+    riskScore: float
+    riskLevel: str
+    title: str
+    primaryReason: str
+    reasons: list[dict] = []
+    frame: str | None = None
+    detectedClasses: list[str] = []
+
+
+@router.get("/incidents")
+async def get_incidents():
+    """Retrieve logged incidents for audit and forensic review."""
+    return {"incidents": _INCIDENTS_STORE}
+
+
+@router.post("/incidents")
+async def log_incident(incident: IncidentRecord):
+    """Store an incident record."""
+    data = incident.model_dump()
+    if not data.get("id"):
+        import uuid
+        data["id"] = f"inc-{uuid.uuid4().hex[:8]}"
+    _INCIDENTS_STORE.insert(0, data)
+    if len(_INCIDENTS_STORE) > 100:
+        _INCIDENTS_STORE.pop()
+    return {"status": "recorded", "incident": data}
+
+
 from app.risk.config import RiskConfig, get_config, update_config
 
 
 class ConfigUpdateRequest(BaseModel):
     model_path: str | None = None
-    detection_confidence_threshold: float | None = None
+    detection_confidence_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     unsafe_classes: list[str] | None = None
-    frame_skip: int | None = None
+    frame_skip: int | None = Field(default=None, ge=1, le=10)
     speed_thresholds: dict[str, float] | None = None
     proximity_thresholds: dict[str, float] | None = None
     score_weights: dict[str, float] | None = None
@@ -105,5 +174,12 @@ async def read_config():
 @router.post("/config", response_model=ConfigResponse)
 async def update_configuration(updates: ConfigUpdateRequest):
     data = updates.model_dump(exclude_unset=True)
+    if "model_path" in data:
+        raw_m = data["model_path"]
+        if raw_m in ALLOWED_MODELS:
+            data["model_path"] = ALLOWED_MODELS[raw_m]
+        elif not os.path.exists(raw_m):
+            raise HTTPException(400, f"Model path not allowed or not found: {raw_m}")
+
     updated = update_config(data)
     return updated.to_response()
