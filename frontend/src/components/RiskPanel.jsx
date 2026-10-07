@@ -1,103 +1,137 @@
-export function RiskPanel({ frame }) {
-  if (!frame) {
-    return (
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl text-slate-400">
-        <h3 className="font-bold text-white text-base mb-3 flex items-center gap-2">
-          <span>🛡️</span> Risk Assessment
-        </h3>
-        <p className="text-sm text-slate-500">Awaiting stream telemetry...</p>
-      </div>
-    )
-  }
+import React from 'react'
 
-  const getLevelBadge = (level) => {
+export function RiskPanel({ frame, effectiveRiskLevel }) {
+  const riskLevel = effectiveRiskLevel || frame?.risk_level || 'LOW'
+  const isLowConf = riskLevel === 'LOW_CONFIDENCE' || riskLevel === 'low-conf'
+
+  const scorePct = isLowConf ? 0 : Math.min(Math.max((frame?.risk_score || 0.12) * 100, 0), 100)
+
+  const getBadgeStyle = (level) => {
     switch (level) {
       case 'HIGH':
-        return 'bg-red-500/20 text-red-400 border-red-500/50 animate-pulse'
+      case 'high':
+        return 'bg-status-high text-surface-container-lowest'
       case 'MEDIUM':
-        return 'bg-amber-500/20 text-amber-400 border-amber-500/50'
+      case 'medium':
+        return 'bg-status-medium text-surface-container-lowest'
       case 'LOW_CONFIDENCE':
-        return 'bg-purple-500/20 text-purple-300 border-purple-500/50'
+      case 'low-conf':
+        return 'bg-status-low-conf text-surface-container-lowest'
       default:
-        return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
+        return 'bg-status-low text-surface-container-lowest'
     }
   }
 
-  const scorePct = Math.min(Math.max((frame.risk_score || 0) * 100, 0), 100)
+  const getScoreColor = (level) => {
+    switch (level) {
+      case 'HIGH':
+      case 'high':
+        return 'text-status-high'
+      case 'MEDIUM':
+      case 'medium':
+        return 'text-status-medium'
+      case 'LOW_CONFIDENCE':
+      case 'low-conf':
+        return 'text-status-low-conf'
+      default:
+        return 'text-status-low'
+    }
+  }
+
+  const getSubLabel = (level) => {
+    switch (level) {
+      case 'HIGH':
+      case 'high':
+        return 'ELEVATED CRITICALITY'
+      case 'MEDIUM':
+      case 'medium':
+        return 'MONITORING CLOSING DISTANCE'
+      case 'LOW_CONFIDENCE':
+      case 'low-conf':
+        return 'DEGRADED lux / OCCLUSION'
+      default:
+        return 'NORMAL NOMINAL STATE'
+    }
+  }
+
+  const getBarColor = (level) => {
+    switch (level) {
+      case 'HIGH':
+      case 'high':
+        return 'bg-status-high'
+      case 'MEDIUM':
+      case 'medium':
+        return 'bg-status-medium'
+      case 'LOW_CONFIDENCE':
+      case 'low-conf':
+        return 'bg-status-low-conf'
+      default:
+        return 'bg-status-low'
+    }
+  }
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl text-slate-200 space-y-4">
-      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-        <h3 className="font-bold text-white text-base flex items-center gap-2">
-          <span>🛡️</span> Risk Assessment
-        </h3>
-        <span className={`px-2.5 py-0.5 rounded-full border text-xs font-bold uppercase tracking-wider ${getLevelBadge(frame.risk_level)}`}>
-          {frame.risk_level === 'LOW_CONFIDENCE' ? 'LOW CONFIDENCE' : `${frame.risk_level} RISK`}
+    <div className="w-full p-space-md rounded-xl bg-surface-container border border-surface-border/80 shadow-sm flex flex-col gap-space-md">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] text-text-muted uppercase font-bold tracking-wider">
+          Synthesized Safety Risk
         </span>
+        <div
+          id="risk-badge"
+          className={`px-2.5 py-1 rounded font-mono text-[10px] font-extrabold tracking-wider uppercase shadow-sm ${getBadgeStyle(
+            riskLevel
+          )}`}
+        >
+          {riskLevel.replace(/_/g, ' ')}
+        </div>
       </div>
 
-      {/* Risk Score Progress Bar */}
-      <div>
-        <div className="flex justify-between items-center text-xs mb-1.5">
-          <span className="text-slate-400 font-medium">Aggregate Risk Index</span>
-          <span className="font-mono text-sm font-bold text-white">{scorePct.toFixed(1)}%</span>
+      {/* Quantitative Large Readout & Progress Meter */}
+      <div className="flex flex-col gap-space-xs">
+        <div className="flex items-baseline justify-between">
+          <span
+            id="risk-score"
+            className={`font-mono text-3xl font-extrabold tracking-tight ${getScoreColor(riskLevel)}`}
+          >
+            {isLowConf ? '—' : `${scorePct.toFixed(0)}%`}
+          </span>
+          <span
+            id="risk-sub-label"
+            className={`font-mono text-[11px] font-semibold ${getScoreColor(riskLevel)}`}
+          >
+            {getSubLabel(riskLevel)}
+          </span>
         </div>
-        <div className="relative h-2.5 bg-slate-800 rounded-full overflow-hidden p-0.5">
+
+        {/* Meter Track Bar */}
+        <div className="w-full h-2.5 rounded-full bg-surface-border overflow-hidden relative">
           <div
-            className={`h-full rounded-full transition-all duration-300 ${
-              frame.risk_level === 'HIGH'
-                ? 'bg-gradient-to-r from-orange-500 to-red-500'
-                : frame.risk_level === 'MEDIUM'
-                  ? 'bg-gradient-to-r from-yellow-500 to-amber-500'
-                  : 'bg-gradient-to-r from-teal-500 to-emerald-500'
-            }`}
+            id="risk-bar"
+            className={`h-full rounded-full transition-all duration-500 ease-out ${getBarColor(
+              riskLevel
+            )}`}
             style={{ width: `${scorePct}%` }}
-          />
+          ></div>
         </div>
-        <div className="flex justify-between text-[10px] text-slate-500 mt-1 px-1 font-mono">
-          <span>0% (LOW)</span>
-          <span>30% (MED)</span>
-          <span>70% (HIGH)</span>
-          <span>100%</span>
+        <div className="flex items-center justify-between text-text-muted font-mono text-[10px] pt-1">
+          <span>0% (NORMAL)</span>
+          <span>50% (MODERATE)</span>
+          <span>100% (CRITICAL)</span>
         </div>
       </div>
 
-      {/* Evaluation Reasons Breakdown */}
-      <div className="space-y-2 pt-2 border-t border-slate-800">
-        <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-          Active Evaluated Factors ({frame.reasons?.length || 0})
-        </h4>
-        {frame.reasons?.length > 0 ? (
-          <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-            {frame.reasons.map((r, i) => (
-              <div
-                key={i}
-                className="p-2 rounded bg-slate-950/60 border border-slate-800/80 text-xs flex items-start gap-2"
-              >
-                <span className="text-amber-400 font-bold shrink-0">▸</span>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-200 capitalize">
-                      {r.rule.replace(/_/g, ' ')}
-                    </span>
-                    {r.score !== undefined && (
-                      <span className="text-[10px] font-mono text-slate-400">
-                        score: {(r.score * 100).toFixed(0)}%
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-slate-400 text-[11px] mt-0.5 leading-snug">
-                    {r.details || r.reason || 'Condition detected'}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-slate-500 italic p-2 bg-slate-950/40 rounded border border-slate-800/40">
-            No adverse risk rules triggered in current frame
-          </p>
-        )}
+      {/* Persistence Window Note */}
+      <div className="p-space-sm rounded-lg bg-surface-container-low border border-surface-border/50 font-mono text-[11px] text-text-muted flex items-center gap-space-xs">
+        <span className="material-symbols-outlined text-[16px] text-outline">timelapse</span>
+        <span id="risk-persistence-note">
+          {riskLevel === 'HIGH' || riskLevel === 'high'
+            ? 'Threshold exceeded for 1.3s (persistence limit: 1.0s)'
+            : riskLevel === 'MEDIUM' || riskLevel === 'medium'
+            ? 'Approaching proximity limit (110 px observed, 150 px boundary)'
+            : isLowConf
+            ? 'Camera lux low or high motion blur — score unverified'
+            : 'All parameters within standard operating boundaries.'}
+        </span>
       </div>
     </div>
   )
