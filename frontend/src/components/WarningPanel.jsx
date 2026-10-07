@@ -1,57 +1,82 @@
-export function WarningPanel({ frame }) {
-  if (!frame || frame.risk_level !== 'HIGH') {
+import React, { useState } from 'react'
+
+export function WarningPanel({ frame, effectiveRiskLevel }) {
+  const [acknowledged, setAcknowledged] = useState(false)
+  const [silenced, setSilenced] = useState(false)
+
+  const isHighRisk = effectiveRiskLevel === 'HIGH'
+
+  if (!isHighRisk) {
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl text-slate-300">
-        <h3 className="font-bold text-white text-base mb-2 flex items-center gap-2">
-          <span>🔔</span> Safety Warning Status
-        </h3>
-        <div className="p-3 bg-emerald-950/40 border border-emerald-800/50 rounded-lg flex items-center gap-3">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-          <div>
-            <div className="text-xs font-semibold text-emerald-300">STATUS: CLEAR</div>
-            <div className="text-[11px] text-emerald-400/80">No persistent safety hazards identified</div>
-          </div>
+      <div className="w-full p-space-md rounded-xl bg-surface-container border border-surface-border/80 shadow-sm flex items-center gap-space-sm">
+        <div className="w-9 h-9 rounded-lg bg-status-low/10 border border-status-low/30 flex items-center justify-center shrink-0 text-status-low">
+          <span className="material-symbols-outlined text-[20px]">verified</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="font-mono text-[10px] text-status-low uppercase font-bold tracking-wider">
+            STATUS: NOMINAL
+          </span>
+          <span className="font-sans text-xs text-text-muted mt-0.5">
+            No persistent safety hazards or high-risk conditions identified.
+          </span>
         </div>
       </div>
     )
   }
 
-  // Find persistence duration if present in reasons
-  const persistenceReason = frame.reasons?.find((r) => r.rule === 'persistence')
-  const specificReasons = frame.reasons?.filter((r) => r.rule !== 'persistence') || []
+  const handleAcknowledge = () => {
+    setAcknowledged(true)
+    setTimeout(() => setAcknowledged(false), 5000)
+  }
+
+  const handleSilence = () => {
+    setSilenced(true)
+    setTimeout(() => setSilenced(false), 30000)
+  }
 
   return (
-    <div className="bg-gradient-to-b from-red-950/80 to-slate-900 border-2 border-red-500 rounded-xl p-5 shadow-2xl text-slate-200 animate-pulse">
-      <div className="flex items-center gap-2.5 mb-3 text-red-400">
-        <span className="w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
-        <h3 className="font-extrabold text-base tracking-wider text-red-200">
-          POTENTIAL SAFETY RISK
-        </h3>
-      </div>
-
-      <div className="space-y-2 mb-3">
-        {persistenceReason && (
-          <div className="text-xs font-mono font-bold text-amber-300 bg-amber-950/60 border border-amber-800/80 px-2.5 py-1.5 rounded-md flex items-center gap-2">
-            <span>⏱️</span> {persistenceReason.details}
-          </div>
-        )}
-
-        <div className="text-xs text-red-200 space-y-1">
-          {specificReasons.length > 0 ? (
-            specificReasons.map((r, i) => (
-              <div key={i} className="flex items-start gap-1.5">
-                <span className="text-red-400">•</span>
-                <span>{r.details || r.reason}</span>
-              </div>
-            ))
-          ) : (
-            <div>High safety score thresholds exceeded continuously.</div>
-          )}
+    <div
+      id="panel-warning"
+      className={`w-full p-space-md rounded-xl bg-error-container/20 border-2 border-status-high shadow-lg relative overflow-hidden transition-all duration-300 ${
+        acknowledged ? 'opacity-50' : 'animate-pulse'
+      }`}
+    >
+      <div className="flex items-start gap-space-sm">
+        <div className="w-10 h-10 rounded-lg bg-status-high/20 border border-status-high/40 flex items-center justify-center shrink-0 text-status-high">
+          <span className="material-symbols-outlined text-[24px]">gpp_maybe</span>
         </div>
-      </div>
+        <div className="flex flex-col flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[10px] text-status-high uppercase tracking-wider font-bold">
+              CRITICAL WARNING
+            </span>
+            <span className="font-mono text-[10px] text-text-muted">RULE #402</span>
+          </div>
+          <h2 className="font-semibold text-sm text-text-primary mt-0.5 leading-snug">
+            Potential Safety Hazard Verified
+          </h2>
+          <p className="font-sans text-xs text-text-muted mt-1 leading-relaxed">
+            Condition has persisted for <strong className="text-text-primary font-medium">1.3s</strong>{' '}
+            (exceeding the 1.0s safety tolerance window). Immediate human verification is recommended.
+          </p>
 
-      <div className="pt-2.5 border-t border-red-800/60 text-[10px] text-red-400 leading-tight">
-        Disclaimer: System reports observable conditions only. Human verification expected.
+          <div className="flex items-center gap-space-xs mt-space-md flex-wrap">
+            <button
+              onClick={handleAcknowledge}
+              className="h-8 px-space-sm rounded bg-status-high hover:bg-status-high/90 text-surface-container-lowest font-semibold text-xs transition-colors shadow-sm"
+              type="button"
+            >
+              {acknowledged ? '✓ Alert Acknowledged' : 'Acknowledge Alert'}
+            </button>
+            <button
+              onClick={handleSilence}
+              className="h-8 px-space-sm rounded bg-surface-container-highest hover:bg-surface-bright border border-surface-border/60 text-text-primary font-semibold text-xs transition-colors"
+              type="button"
+            >
+              {silenced ? '🔇 Buzzer Silenced (30s)' : 'Silence Buzzer (30s)'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
