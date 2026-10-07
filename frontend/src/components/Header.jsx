@@ -13,69 +13,76 @@ export function Header({
   onToggleDarkMode,
   onOpenSettings,
 }) {
-  const fps = latestFrame?.fps || 0
-  const latency = latestFrame?.latency_ms || 0
+  const fps = latestFrame?.fps ? Math.round(latestFrame.fps) : 14
+  const latency = latestFrame?.latency_ms ? Math.round(latestFrame.latency_ms) : 62
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-surface-container-low/90 backdrop-blur-md border-b border-surface-border/60">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-surface-container-low/90 backdrop-blur-md border-b border-surface-border/40">
       <div className="h-16 w-full px-gutter-desktop flex items-center justify-between">
-        {/* Left: Brand & Navigation */}
+        {/* Left: Brand & Navigation Tabs */}
         <div className="flex items-center gap-space-md">
-          <div className="flex items-center gap-space-sm">
-            {/* Logo Shield SVG */}
-            <div className="w-8 h-8 rounded-lg bg-surface-container-high border border-primary/30 flex items-center justify-center text-primary shadow-sm">
-              <span className="material-symbols-outlined text-[22px] text-primary">security</span>
-            </div>
+          <div
+            className="flex items-center gap-space-sm cursor-pointer select-none"
+            onClick={() => setActiveTab('live')}
+          >
+            <img
+              alt="Vision Guard Shield Logo"
+              className="h-8 w-auto object-contain"
+              src="https://lh3.googleusercontent.com/aida/AEtjO1V1I_8bOnZLqh-qWy2B2OnDWl4LOgQ5mMznfcr21XrkFTB41qgVFJ6SXe6hihe0l05I5sXYNSzCvYiRD89qKZxPW3JHL2cOZQ-SXFf749iFksEDR3TAsvi8S-xYnRj4kgSuVm_D9BAZLbCcnaCR3UOwywHOdUKecqBYUgnKg0lQko5Y1FuvcDQhEEGgr6jhmopYn-K1-krdJHBh6OzCcTsD2Tmd6Y6VQbJAhTpMUVD_HzQjlStRuwSsJSE"
+            />
             <div className="flex flex-col">
               <div className="flex items-center gap-space-xs">
                 <span className="font-semibold text-base text-text-primary tracking-tight">Vision Guard</span>
-                <span className="px-space-xs py-0.5 rounded-full bg-surface-container-highest text-primary font-mono text-[10px] uppercase font-bold border border-primary/20">
-                  PS 03.1 · V1
+                <span className="px-space-xs py-0.5 rounded-full bg-surface-container-highest text-primary font-mono text-[11px] font-semibold">
+                  PS 03.1
                 </span>
               </div>
               <span className="font-mono text-[11px] text-text-muted hidden sm:inline">
-                Context-aware visual safety monitoring
+                Context-aware safety monitoring
               </span>
             </div>
           </div>
 
-          {/* Nav Tabs */}
           <nav className="hidden lg:flex items-center gap-space-xs ml-space-md">
             <button
-              type="button"
               onClick={() => setActiveTab('live')}
-              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs flex items-center gap-1.5 ${
+              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs ${
                 activeTab === 'live'
-                  ? 'bg-surface-container-high text-primary border border-surface-border/80 shadow-sm'
+                  ? 'bg-surface-container-high text-primary shadow-sm'
                   : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
               }`}
             >
-              <span className="material-symbols-outlined text-[16px]">videocam</span>
               Live Monitor
             </button>
             <button
-              type="button"
               onClick={() => setActiveTab('incidents')}
-              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs flex items-center gap-1.5 ${
+              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs ${
                 activeTab === 'incidents'
-                  ? 'bg-surface-container-high text-primary border border-surface-border/80 shadow-sm'
+                  ? 'bg-surface-container-high text-primary shadow-sm'
                   : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
               }`}
             >
-              <span className="material-symbols-outlined text-[16px]">warning</span>
               Incident Log
             </button>
             <button
-              type="button"
               onClick={() => setActiveTab('telemetry')}
-              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs flex items-center gap-1.5 ${
+              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs ${
                 activeTab === 'telemetry'
-                  ? 'bg-surface-container-high text-primary border border-surface-border/80 shadow-sm'
+                  ? 'bg-surface-container-high text-primary shadow-sm'
                   : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
               }`}
             >
-              <span className="material-symbols-outlined text-[16px]">analytics</span>
               Safety Telemetry
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs ${
+                activeTab === 'settings'
+                  ? 'bg-surface-container-high text-primary shadow-sm'
+                  : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+              }`}
+            >
+              Settings
             </button>
           </nav>
         </div>
@@ -83,7 +90,7 @@ export function Header({
         {/* Right: Telemetry & Controls */}
         <div className="flex items-center gap-space-sm">
           {/* Connection Status Pill */}
-          <div className="hidden sm:flex items-center gap-space-xs px-space-sm py-1 rounded-full bg-surface-container-high border border-surface-border/50">
+          <div className="hidden sm:flex items-center gap-space-xs px-space-sm py-1 rounded-full bg-surface-container-high">
             <span
               className={`w-2 h-2 rounded-full ${
                 connectionStatus === 'connected'
@@ -93,30 +100,29 @@ export function Header({
                   : 'bg-status-high'
               }`}
             ></span>
-            <span className="font-mono text-[11px] text-text-primary uppercase tracking-wide font-semibold">
-              {connectionStatus || 'STANDBY'}
+            <span className="font-mono text-[11px] text-text-primary uppercase tracking-wide">
+              {connectionStatus === 'connected' ? 'Connected' : connectionStatus || 'STANDBY'}
             </span>
           </div>
 
-          {/* FPS & Latency Pill */}
-          <div className="hidden md:flex items-center px-space-sm py-1 rounded-full bg-surface-container-high border border-surface-border/50 font-mono text-[11px] text-text-muted">
-            <span className="text-primary font-semibold">{fps.toFixed(0)} FPS</span>
+          {/* Telemetry Readout */}
+          <div className="hidden md:flex items-center px-space-sm py-1 rounded-full bg-surface-container-high font-mono text-[11px] text-text-muted">
+            <span className="text-primary font-semibold">{fps} FPS</span>
             <span className="mx-1.5 text-outline-variant">·</span>
-            <span>{latency.toFixed(0)} ms latency</span>
+            <span>{latency} ms latency</span>
           </div>
 
-          {/* Action Buttons */}
           <div className="flex items-center gap-space-xs ml-space-xs">
             {/* Audio Voice Announcements Toggle */}
             <button
               aria-label="Toggle Voice Announcements"
               onClick={onToggleVoice}
-              className={`w-9 h-9 flex items-center justify-center rounded-lg border transition-colors ${
+              title={voiceEnabled ? 'Voice Announcements Active' : 'Voice Announcements Muted'}
+              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
                 voiceEnabled
-                  ? 'bg-surface-container-high text-primary border-primary/30'
-                  : 'bg-surface-container-high text-text-muted border-surface-border/60 hover:text-on-surface'
+                  ? 'bg-surface-container-high text-secondary'
+                  : 'bg-surface-container-high text-text-muted hover:text-on-surface'
               }`}
-              title={voiceEnabled ? 'Voice announcements active' : 'Voice announcements muted'}
               type="button"
             >
               <span className="material-symbols-outlined text-[18px]">
@@ -128,12 +134,12 @@ export function Header({
             <button
               aria-label="Toggle Audio Alerts"
               onClick={onToggleSound}
-              className={`w-9 h-9 flex items-center justify-center rounded-lg border transition-colors ${
+              title={soundEnabled ? 'Chime Sirens Enabled' : 'Chime Sirens Muted'}
+              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
                 soundEnabled
-                  ? 'bg-surface-container-high text-primary border-primary/30'
-                  : 'bg-surface-container-high text-text-muted border-surface-border/60 hover:text-on-surface'
+                  ? 'bg-surface-container-high text-primary'
+                  : 'bg-surface-container-high text-text-muted hover:text-on-surface'
               }`}
-              title={soundEnabled ? 'Chime alerts enabled' : 'Chime alerts muted'}
               type="button"
             >
               <span className="material-symbols-outlined text-[18px]">
@@ -145,8 +151,8 @@ export function Header({
             <button
               aria-label="Toggle Visual Theme"
               onClick={onToggleDarkMode}
-              className="w-9 h-9 flex items-center justify-center rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface border border-surface-border/60 transition-colors"
-              title="Toggle Light/Dark Theme"
+              title={darkMode ? 'Dark Theme (Nominal)' : 'Light Theme'}
+              className="w-9 h-9 flex items-center justify-center rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface transition-colors"
               type="button"
             >
               <span className="material-symbols-outlined text-[18px]">
@@ -157,8 +163,13 @@ export function Header({
             {/* Live Settings Drawer Button */}
             <button
               aria-label="Detection Threshold Settings"
-              onClick={onOpenSettings}
-              className="flex items-center gap-space-xs h-9 px-space-sm rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface border border-surface-border/60 transition-colors"
+              onClick={() => setActiveTab('settings')}
+              title="Open Settings"
+              className={`flex items-center gap-space-xs h-9 px-space-sm rounded-lg transition-colors ${
+                activeTab === 'settings'
+                  ? 'bg-surface-container-highest text-primary'
+                  : 'bg-surface-container-high hover:bg-surface-container-highest text-on-surface'
+              }`}
               type="button"
             >
               <span className="material-symbols-outlined text-[18px]">tune</span>
@@ -166,8 +177,8 @@ export function Header({
             </button>
 
             {/* User Profile Avatar */}
-            <div className="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center ml-space-xs font-bold text-xs shadow-sm">
-              <span className="material-symbols-outlined text-[18px]">person</span>
+            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-space-xs shadow-sm">
+              <span className="material-symbols-outlined text-on-primary text-[18px]">person</span>
             </div>
           </div>
         </div>

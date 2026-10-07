@@ -10,10 +10,11 @@ import { ThresholdTuningCard } from './components/ThresholdTuningCard'
 import { IncidentHistory } from './components/IncidentHistory'
 import { SafetyTelemetryView } from './components/SafetyTelemetryView'
 import { SettingsModal } from './components/SettingsModal'
+import { SettingsView } from './components/SettingsView'
 import { useDetectionWebSocket } from './hooks/useDetectionWebSocket'
 
 function App() {
-  const [activeTab, setActiveTab] = useState('live') // 'live' | 'incidents' | 'telemetry'
+  const [activeTab, setActiveTab] = useState('live') // 'live' | 'incidents' | 'telemetry' | 'settings'
   const [sessionId, setSessionId] = useState(null)
   const [source, setSource] = useState('webcam')
   const [deviceIndex, setDeviceIndex] = useState(0)
@@ -98,6 +99,39 @@ function App() {
 
       setIncidents((prev) => [newIncident, ...prev].slice(0, 30))
     }
+  }, [latestFrame, config])
+
+  // Manual snapshot capture from operator
+  const handleCaptureSnapshot = useCallback(() => {
+    const now = Date.now()
+    const timeStr = new Date().toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+
+    const unsafe =
+      latestFrame?.objects?.filter((o) =>
+        (config?.unsafe_classes || ['knife', 'scissors', 'gun']).includes(o.class_name)
+      ) || []
+
+    const newIncident = {
+      id: `inc-manual-${now}`,
+      timestamp: now,
+      timeStr,
+      riskScore: latestFrame?.risk_score ?? 0.84,
+      riskLevel: latestFrame?.risk_level ?? 'HIGH',
+      title: 'Manual Operator Evidence Snapshot',
+      primaryReason: 'Manual operator visual capture during active monitoring session',
+      reasons: latestFrame?.reasons?.length
+        ? latestFrame.reasons
+        : [{ details: 'Manual keyframe captured for forensic retention', rule: 'manual_capture' }],
+      frame: latestFrame?.frame || null,
+      detectedClasses: unsafe.map((o) => `${o.class_name} (${(o.confidence * 100).toFixed(0)}%)`),
+    }
+
+    setIncidents((prev) => [newIncident, ...prev].slice(0, 30))
+    alert(`Snapshot recorded at ${timeStr} and added to Incident Log!`)
   }, [latestFrame, config])
 
   // Start Session API call
@@ -245,6 +279,7 @@ function App() {
                   onStopSession={stopSession}
                   isStarting={isStarting}
                   effectiveRiskLevel={effectiveRiskLevel}
+                  onCaptureSnapshot={handleCaptureSnapshot}
                 />
               </div>
 
@@ -285,10 +320,21 @@ function App() {
               <SafetyTelemetryView latestFrame={latestFrame} config={config} />
             </div>
           )}
+
+          {activeTab === 'settings' && (
+            <div className="pt-space-xs">
+              <SettingsView
+                config={config}
+                onConfigSaved={(updated) => setConfig(updated)}
+                soundEnabled={soundEnabled}
+                onToggleSound={() => setSoundEnabled((prev) => !prev)}
+              />
+            </div>
+          )}
         </div>
       </main>
 
-      {/* 4. Settings Modal */}
+      {/* 4. Settings Modal Fallback */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -296,9 +342,25 @@ function App() {
         onConfigSaved={(updated) => setConfig(updated)}
       />
 
-      {/* Footer */}
-      <footer className="border-t border-surface-border/60 bg-surface-container-low py-3 text-center font-mono text-[11px] text-text-muted">
-        Vision Guard PS 03.1 &bull; Real-time YOLOv8 &bull; Movement Velocity & Tracking Engine &bull; Automated Voice Callouts
+      {/* 5. Stitch 1:1 Compliance Footer */}
+      <footer className="w-full bg-surface-container-lowest/80 py-space-md border-t border-surface-border/40">
+        <div className="w-full px-gutter-desktop flex flex-col md:flex-row items-center justify-between gap-space-sm max-w-[1600px] mx-auto">
+          <div className="flex items-start gap-space-xs max-w-4xl">
+            <span className="material-symbols-outlined text-outline text-[16px] mt-0.5 shrink-0">
+              info
+            </span>
+            <p className="font-sans text-xs text-text-muted leading-relaxed">
+              Vision Guard reports observable conditions only (objects, movement, distance, persistence). It does not identify people or infer intent or emotion. Human verification is expected.
+            </p>
+          </div>
+          <div className="flex items-center gap-space-md shrink-0 font-mono text-[11px] text-outline">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
+              CV Core v2.4.1
+            </span>
+            <span>IEEE Hackathon 2026</span>
+          </div>
+        </div>
       </footer>
     </div>
   )

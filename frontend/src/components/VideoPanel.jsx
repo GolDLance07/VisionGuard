@@ -17,6 +17,7 @@ export function VideoPanel({
   onStopSession,
   isStarting = false,
   effectiveRiskLevel,
+  onCaptureSnapshot,
 }) {
   const [fullscreen, setFullscreen] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -571,8 +572,14 @@ export function VideoPanel({
         <div className="flex items-center gap-space-sm">
           <button
             className="w-9 h-9 rounded-lg bg-surface-container-high hover:bg-surface-container-highest border border-surface-border/60 flex items-center justify-center text-text-primary transition-colors"
-            title="Capture Snapshot"
-            onClick={() => alert('Snapshot captured to session logs!')}
+            title="Capture Snapshot Evidence"
+            onClick={() => {
+              if (onCaptureSnapshot) {
+                onCaptureSnapshot()
+              } else {
+                alert('Snapshot captured to session logs!')
+              }
+            }}
             type="button"
           >
             <span className="material-symbols-outlined text-[18px]">photo_camera</span>
