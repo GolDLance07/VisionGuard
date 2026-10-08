@@ -14,6 +14,9 @@ import { SettingsView } from './components/SettingsView'
 import { useDetectionWebSocket } from './hooks/useDetectionWebSocket'
 
 function App() {
+  const COOLDOWN_MS = 4000;
+  const openIncidentsRef = useRef(new Map());
+  const nextIncidentIdRef = useRef(1);
   const [activeTab, setActiveTab] = useState('live') // 'live' | 'incidents' | 'telemetry' | 'settings'
   const [sessionId, setSessionId] = useState(null)
   const [source, setSource] = useState('webcam')
@@ -49,57 +52,102 @@ function App() {
   }, [darkMode])
 
   // Record HIGH-risk incident snapshots
+  // 1. Group Detections into Single Incident
   useEffect(() => {
-    if (!latestFrame || latestFrame.risk_level !== 'HIGH') return
+    if (!latestFrame || latestFrame.risk_level !== 'HIGH') return;
 
-    const now = Date.now()
-    if (now - lastIncidentTimeRef.current > 3500) {
-      lastIncidentTimeRef.current = now
+    const now = Date.now();
+    const timeStr = new Date().toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
 
-      const timeStr = new Date().toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      })
+    const unsafe = (latestFrame.objects || []).filter((o) =>
+      (config?.unsafe_classes || ['knife', 'scissors', 'gun']).includes(o.class_name)
+    );
 
-      const unsafe =
-        latestFrame.objects?.filter((o) =>
-          (config?.unsafe_classes || ['knife', 'scissors', 'gun']).includes(o.class_name)
-        ) || []
-
-      const getCategory = (cls) => {
-        const l = (cls || '').toLowerCase()
-        if (['knife', 'scissors', 'blade', 'dagger', 'sword', 'box cutter', 'machete'].includes(l))
-          return 'Sharp Object'
-        if (['gun', 'pistol', 'rifle', 'handgun', 'shotgun', 'weapon'].includes(l))
-          return 'Firearm'
-        return 'Hazardous Object'
+    const getCategory = (cls) => {
+      const l = (cls || '').toLowerCase();
+      if (['knife', 'scissors', 'blade', 'dagger', 'sword', 'box cutter', 'machete'].includes(l)) {
+        return 'Sharp Object';
       }
-
-      const categories = [...new Set(unsafe.map((o) => getCategory(o.class_name)))]
-      const title =
-        categories.length > 0 ? `${categories.join(' & ')} Detected` : 'Safety Risk Threshold Exceeded'
-
-      const primaryReason =
-        latestFrame.reasons?.find((r) => r.rule !== 'persistence')?.details ||
-        'Unsafe physical vector conditions observed'
-
-      const newIncident = {
-        id: `inc-${now}`,
-        timestamp: now,
-        timeStr,
-        riskScore: latestFrame.risk_score,
-        riskLevel: latestFrame.risk_level,
-        title,
-        primaryReason,
-        reasons: latestFrame.reasons || [],
-        frame: latestFrame.frame,
-        detectedClasses: unsafe.map((o) => `${o.class_name} (${(o.confidence * 100).toFixed(0)}%)`),
+      if (['gun', 'pistol', 'rifle', 'handgun', 'shotgun', 'weapon'].includes(l)) {
+        return 'Firearm';
       }
+      return 'Hazardous Object';
+    };
 
-      setIncidents((prev) => [newIncident, ...prev].slice(0, 30))
-    }
-  }, [latestFrame, config])
+    unsafe.forEach((obj) => {
+      const key = obj.class_name.toLowerCase();
+      const existing = openIncidentsRef.current.get(key);
+
+      if (existing) {
+        existing.lastSeenAt = now;
+        existing.durationMs = now - existing.startedAt;
+        existing.detectionCount += 1;
+        if (obj.confidence > existing.peakConfidence) {
+          existing.peakConfidence = obj.confidence;
+        }
+
+        setIncidents((prev) =>
+          prev.map((inc) => (inc.id === existing.id ? { ...existing } : inc))
+        );
+      } else {
+        const categories = [getCategory(obj.class_name)];
+        const title = `${categories.join(' & ')} Detected`;
+        const primaryReason =
+          latestFrame.reasons?.find((r) => r.rule !== 'persistence')?.details ||
+          'Unsafe physical vector conditions observed';
+
+        const newIncident = {
+          id: `inc-${nextIncidentIdRef.current++}`,
+          hazardClass: obj.class_name,
+          state: 'open',
+          startedAt: now,
+          lastSeenAt: now,
+          durationMs: 0,
+          detectionCount: 1,
+          peakConfidence: obj.confidence || 0.9,
+          status: 'unreviewed',
+          timestamp: now,
+          timeStr,
+          riskScore: latestFrame.risk_score,
+          riskLevel: latestFrame.risk_level,
+          title,
+          primaryReason,
+          reasons: latestFrame.reasons || [],
+          frame: latestFrame.frame,
+          detectedClasses: [`${obj.class_name} (${(obj.confidence * 100).toFixed(0)}%)`],
+        };
+
+        openIncidentsRef.current.set(key, newIncident);
+        setIncidents((prev) => [newIncident, ...prev]);
+      }
+    });
+  }, [latestFrame, config]);
+
+  // 2. Cooldown Sweep Timer
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      openIncidentsRef.current.forEach((inc, key) => {
+        if (now - inc.lastSeenAt > COOLDOWN_MS) {
+          inc.state = 'closed';
+          inc.endedAt = inc.lastSeenAt;
+          inc.durationMs = inc.endedAt - inc.startedAt;
+
+          openIncidentsRef.current.delete(key);
+
+          setIncidents((prev) =>
+            prev.map((item) => (item.id === inc.id ? { ...inc } : item))
+          );
+        }
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Manual snapshot capture from operator
   const handleCaptureSnapshot = useCallback(() => {
@@ -208,10 +256,10 @@ function App() {
     ? previewState === 'low'
       ? 'LOW'
       : previewState === 'medium'
-      ? 'MEDIUM'
-      : previewState === 'high'
-      ? 'HIGH'
-      : 'LOW_CONFIDENCE'
+        ? 'MEDIUM'
+        : previewState === 'high'
+          ? 'HIGH'
+          : 'LOW_CONFIDENCE'
     : latestFrame?.risk_level || 'LOW'
 
   return (
