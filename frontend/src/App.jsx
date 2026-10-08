@@ -13,6 +13,8 @@ import { SettingsModal } from './components/SettingsModal'
 import { SettingsView } from './components/SettingsView'
 import { useDetectionWebSocket } from './hooks/useDetectionWebSocket'
 
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
+
 function App() {
   const COOLDOWN_MS = 4000;
   const openIncidentsRef = useRef(new Map());
@@ -126,9 +128,41 @@ function App() {
 
         openIncidentsRef.current.set(key, newIncident);
         setIncidents((prev) => [newIncident, ...prev]);
+
+        // Sync to Neon PostgreSQL and upload critical snapshot to Cloudinary
+        fetch(`${API_BASE}/api/incidents`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newIncident),
+        })
+          .then((res) => res.json())
+          .then((resData) => {
+            if (resData?.incident?.imageUrl) {
+              setIncidents((prev) =>
+                prev.map((it) =>
+                  it.id === newIncident.id
+                    ? { ...it, imageUrl: resData.incident.imageUrl, frame: resData.incident.imageUrl }
+                    : it
+                )
+              );
+            }
+          })
+          .catch((err) => console.debug('Could not sync incident to backend:', err));
       }
     });
   }, [latestFrame, config]);
+
+  // Load persisted incidents from Neon Database on startup
+  useEffect(() => {
+    fetch(`${API_BASE}/api/incidents`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.incidents && Array.isArray(data.incidents) && data.incidents.length > 0) {
+          setIncidents(data.incidents);
+        }
+      })
+      .catch((err) => console.debug('Could not load incidents from database:', err));
+  }, []);
 
   // 2. Cooldown Sweep Timer
   useEffect(() => {
@@ -182,7 +216,28 @@ function App() {
     }
 
     setIncidents((prev) => [newIncident, ...prev].slice(0, 30))
-    alert(`Snapshot recorded at ${timeStr} and added to Incident Log!`)
+
+    // Upload snapshot to Cloudinary and record in database
+    fetch(`${API_BASE}/api/incidents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newIncident),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.incident?.imageUrl) {
+          setIncidents((prev) =>
+            prev.map((it) =>
+              it.id === newIncident.id
+                ? { ...it, imageUrl: data.incident.imageUrl, frame: data.incident.imageUrl }
+                : it
+            )
+          )
+        }
+      })
+      .catch((err) => console.debug('Snapshot sync error:', err))
+
+    alert(`Snapshot recorded at ${timeStr} and queued for Cloudinary sync!`)
   }, [latestFrame, config])
 
   // Start Session API call
@@ -206,7 +261,7 @@ function App() {
         file_ref: activeSource === 'upload' ? activeFileRef : undefined,
       }
 
-      const res = await fetch('/api/session/start', {
+      const res = await fetch(`${API_BASE}/api/session/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -231,7 +286,7 @@ function App() {
   const stopSession = useCallback(async () => {
     if (!sessionId) return
     try {
-      await fetch('/api/session/stop', {
+      await fetch(`${API_BASE}/api/session/stop`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId }),
@@ -246,7 +301,7 @@ function App() {
 
   // Load config on startup
   useEffect(() => {
-    fetch('/api/config')
+    fetch(`${API_BASE}/api/config`)
       .then((r) => r.json())
       .then((cfg) => setConfig(cfg))
       .catch((err) => console.warn('Could not load config from backend:', err))

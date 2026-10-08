@@ -18,9 +18,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+import os
+from fastapi.staticfiles import StaticFiles
+from app.db.database import init_db
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: create the shared stream manager on app state
+    # Startup: Initialize Neon/PostgreSQL database tables and shared stream manager
+    try:
+        init_db()
+    except Exception as e:
+        logger.warning(f"Database init warning: {e}")
+
     app.state.stream_manager = VideoStreamManager()
     yield
     # Shutdown: release all active sessions
@@ -33,6 +43,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.state.stream_manager = VideoStreamManager()
+
+# Mount snapshots static directory for local snapshot evidence fallback
+snapshots_dir = os.path.join(os.path.dirname(__file__), "..", "data", "snapshots")
+os.makedirs(snapshots_dir, exist_ok=True)
+app.mount("/api/snapshots", StaticFiles(directory=snapshots_dir), name="snapshots")
 
 app.add_middleware(
     CORSMiddleware,

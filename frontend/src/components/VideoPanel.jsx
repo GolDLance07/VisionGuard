@@ -242,7 +242,8 @@ export function VideoPanel({
     const formData = new FormData()
     formData.append('file', file)
     try {
-      const res = await fetch('/api/session/upload', {
+      const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
+      const res = await fetch(`${apiBase}/api/session/upload`, {
         method: 'POST',
         body: formData,
       })

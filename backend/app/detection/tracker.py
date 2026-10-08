@@ -18,13 +18,10 @@ class Tracker:
         self.model = YOLO(model_path)
 
         # Dual-Model Architecture: Load Pose Estimation model for skeletal keypoints & pointing detection
-        pose_path = "models/yolov8n-pose.pt"
-        if os.path.exists(pose_path):
-            try:
-                self.pose_model = YOLO(pose_path)
-            except Exception:
-                self.pose_model = None
-        else:
+        pose_path = "models/yolov8n-pose.pt" if os.path.exists("models/yolov8n-pose.pt") else "yolov8n-pose.pt"
+        try:
+            self.pose_model = YOLO(pose_path)
+        except Exception:
             self.pose_model = None
 
         self.track_expiry = self.config.track_expiry_frames

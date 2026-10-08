@@ -32,7 +32,10 @@ export function useDetectionWebSocket(sessionId) {
     setErrorMessage(null)
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/ws/detection?session_id=${encodeURIComponent(sessionId)}`
+    const customWsBase = import.meta.env.VITE_WS_URL
+    const wsUrl = customWsBase
+      ? `${customWsBase.replace(/\/+$/, '')}/detection?session_id=${encodeURIComponent(sessionId)}`
+      : `${protocol}//${window.location.host}/ws/detection?session_id=${encodeURIComponent(sessionId)}`
     
     let ws
     try {

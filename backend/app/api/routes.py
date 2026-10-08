@@ -113,7 +113,13 @@ async def stop_session(req: Request, body: SessionStopRequest | None = None, ses
     return {"status": "stopped"}
 
 
-# Forensic incident records (Context1.md #18)
+# Forensic incident records (Neon / Database + Cloudinary Snapshots)
+import json
+import uuid
+from app.db.database import SessionLocal
+from app.db.models import IncidentRecordModel
+from app.db.cloudinary_service import upload_snapshot, is_cloudinary_configured
+
 _INCIDENTS_STORE: list[dict] = []
 
 
@@ -125,28 +131,132 @@ class IncidentRecord(BaseModel):
     riskLevel: str
     title: str
     primaryReason: str
+    hazardClass: str | None = None
+    durationMs: int | None = 0
+    status: str | None = "unreviewed"
     reasons: list[dict] = []
-    frame: str | None = None
+    frame: str | None = None  # Base64 JPEG or Cloudinary URL
+    imageUrl: str | None = None
     detectedClasses: list[str] = []
+
+
+@router.get("/cloud-status")
+async def get_cloud_status():
+    """Return status of Neon Database and Cloudinary integrations."""
+    from app.db.database import DATABASE_URL
+    is_neon = DATABASE_URL.startswith("postgresql") or "neon.tech" in DATABASE_URL
+    return {
+        "database": "Neon PostgreSQL" if is_neon else "Local Database",
+        "database_connected": bool(DATABASE_URL),
+        "cloudinary_configured": is_cloudinary_configured(),
+    }
 
 
 @router.get("/incidents")
 async def get_incidents():
-    """Retrieve logged incidents for audit and forensic review."""
+    """Retrieve logged incidents from database with in-memory fallback."""
+    try:
+        session = SessionLocal()
+        try:
+            records = session.query(IncidentRecordModel).order_by(IncidentRecordModel.created_at.desc()).limit(100).all()
+            if records:
+                return {"incidents": [r.to_dict() for r in records]}
+        finally:
+            session.close()
+    except Exception as e:
+        logger.warning(f"Database query failed, returning cached store: {e}")
+
     return {"incidents": _INCIDENTS_STORE}
 
 
 @router.post("/incidents")
 async def log_incident(incident: IncidentRecord):
-    """Store an incident record."""
+    """Store an incident record in Neon PostgreSQL and upload critical snapshot to Cloudinary."""
     data = incident.model_dump()
     if not data.get("id"):
-        import uuid
         data["id"] = f"inc-{uuid.uuid4().hex[:8]}"
+
+    # 1. Upload critical movement snapshot to Cloudinary if image frame is provided
+    frame_raw = data.get("frame")
+    if frame_raw and not str(frame_raw).startswith("http"):
+        cloud_url = upload_snapshot(frame_raw, incident_id=data["id"])
+        if cloud_url:
+            data["imageUrl"] = cloud_url
+            data["frame"] = cloud_url  # Point UI frame to hosted Cloudinary image
+
+    # 2. Persist in Database (Neon PostgreSQL)
+    try:
+        session = SessionLocal()
+        try:
+            db_record = IncidentRecordModel(
+                id=data["id"],
+                timestamp=data.get("timestamp"),
+                time_str=data.get("timeStr"),
+                risk_score=data.get("riskScore", 0.0),
+                risk_level=data.get("riskLevel", "LOW"),
+                title=data.get("title", "Incident"),
+                primary_reason=data.get("primaryReason", ""),
+                hazard_class=data.get("hazardClass", ""),
+                duration_ms=data.get("durationMs", 0) or 0,
+                status=data.get("status", "unreviewed") or "unreviewed",
+                image_url=data.get("imageUrl") or data.get("frame"),
+                reasons_json=json.dumps(data.get("reasons", [])),
+                detected_classes_json=json.dumps(data.get("detectedClasses", [])),
+            )
+            session.merge(db_record)
+            session.commit()
+        finally:
+            session.close()
+    except Exception as err:
+        logger.warning(f"Could not persist incident to database: {err}")
+
+    # Maintain in-memory cache
     _INCIDENTS_STORE.insert(0, data)
     if len(_INCIDENTS_STORE) > 100:
         _INCIDENTS_STORE.pop()
+
     return {"status": "recorded", "incident": data}
+
+
+@router.patch("/incidents/{incident_id}/status")
+async def update_incident_status(incident_id: str, payload: dict):
+    new_status = payload.get("status")
+    if not new_status:
+        raise HTTPException(400, "status required")
+
+    try:
+        session = SessionLocal()
+        try:
+            record = session.query(IncidentRecordModel).filter_by(id=incident_id).first()
+            if record:
+                record.status = new_status
+                session.commit()
+        finally:
+            session.close()
+    except Exception as e:
+        logger.warning(f"Could not update status in DB: {e}")
+
+    for inc in _INCIDENTS_STORE:
+        if inc.get("id") == incident_id:
+            inc["status"] = new_status
+
+    return {"status": "updated", "id": incident_id, "newStatus": new_status}
+
+
+@router.delete("/incidents")
+async def clear_incidents():
+    try:
+        session = SessionLocal()
+        try:
+            session.query(IncidentRecordModel).delete()
+            session.commit()
+        finally:
+            session.close()
+    except Exception as e:
+        logger.warning(f"Could not clear incidents in DB: {e}")
+
+    _INCIDENTS_STORE.clear()
+    return {"status": "cleared"}
 
 
 from app.risk.config import RiskConfig, get_config, update_config

@@ -620,9 +620,13 @@ export function IncidentHistory({ incidents = [], onClear }) {
                 onClick={() => setIsModalOpen(true)}
                 className="relative w-full aspect-video rounded-lg overflow-hidden bg-surface-container-lowest border border-surface-border cursor-pointer group flex items-center justify-center shadow-inner"
               >
-                {activeIncident.frame ? (
+                {activeIncident.imageUrl || activeIncident.frame ? (
                   <img
-                    src={`data:image/jpeg;base64,${activeIncident.frame}`}
+                    src={
+                      (activeIncident.imageUrl || activeIncident.frame).startsWith('http')
+                        ? (activeIncident.imageUrl || activeIncident.frame)
+                        : `data:image/jpeg;base64,${activeIncident.frame}`
+                    }
                     alt="Captured Incident Evidence"
                     className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
                   />
@@ -864,9 +868,13 @@ export function IncidentHistory({ incidents = [], onClear }) {
             </div>
 
             <div className="rounded-xl overflow-hidden border border-surface-border bg-black aspect-video flex items-center justify-center shadow-inner">
-              {activeIncident.frame ? (
+              {activeIncident.imageUrl || activeIncident.frame ? (
                 <img
-                  src={`data:image/jpeg;base64,${activeIncident.frame}`}
+                  src={
+                    (activeIncident.imageUrl || activeIncident.frame).startsWith('http')
+                      ? (activeIncident.imageUrl || activeIncident.frame)
+                      : `data:image/jpeg;base64,${activeIncident.frame}`
+                  }
                   alt="Full incident frame"
                   className="w-full h-full object-contain"
                 />
