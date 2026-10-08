@@ -294,10 +294,26 @@ export function VideoPanel({
         ['knife', 'scissors', 'gun', 'weapon', 'baseball bat'].includes(o.class_name)
     ) || []
 
-  // Precompute holding relationships between people and unsafe/sharp objects
+  // Classification helpers for Sharp vs Blunt Objects
+  const isSharpObj = (o) => {
+    const cat = getHazardCategory(o.class_name, o.category)
+    if (cat === 'Sharp Objects') return true
+    const lower = (o.class_name || '').toLowerCase()
+    return ['knife', 'scissors', 'blade', 'dagger', 'sword', 'box cutter', 'cutter', 'scalpel'].includes(lower)
+  }
+
+  const isBluntObj = (o) => {
+    const cat = getHazardCategory(o.class_name, o.category)
+    if (cat === 'Blunt Objects') return true
+    const lower = (o.class_name || '').toLowerCase()
+    return ['baseball bat', 'bat', 'crowbar', 'pipe', 'club', 'stick', 'hammer'].includes(lower)
+  }
+
+  // Precompute holding relationships between people and objects
   const holdingPairs = []
   const heldObjectIds = new Set()
   const holdingPersonIds = new Set()
+  const personHeldObjects = new Map() // personId -> list of held objects
 
   people.forEach((p) => {
     unsafeObjects.forEach((w) => {
@@ -328,10 +344,98 @@ export function VideoPanel({
         centerDist < pHeight * 0.45
 
       if (isHolding) {
-        holdingPairs.push({ person: p, weapon: w, distance: edgeDist })
+        const isBlunt = isBluntObj(w)
+        const isSharp = isSharpObj(w)
+        holdingPairs.push({ person: p, weapon: w, distance: edgeDist, isBlunt, isSharp })
         heldObjectIds.add(w.id)
         holdingPersonIds.add(p.id)
+        if (!personHeldObjects.has(p.id)) {
+          personHeldObjects.set(p.id, [])
+        }
+        personHeldObjects.get(p.id).push(w)
       }
+    })
+  })
+
+  // Compute Threat Orientations & Pointing Vectors (Person A -> Person B)
+  const redThreatPersonIds = new Set()
+  const redThreatWeaponIds = new Set()
+  const targetedPersonIds = new Set()
+  const pointingThreatVectors = [] // [{ fromPerson, toPerson, weapon, reason, dist }]
+
+  people.forEach((pA) => {
+    const heldList = personHeldObjects.get(pA.id) || []
+    const isArmed = heldList.length > 0
+    const pSpeed = pA.speed || 0
+    const pA_cx = (pA.bbox.x1 + pA.bbox.x2) / 2
+    const pA_cy = (pA.bbox.y1 + pA.bbox.y2) / 2
+
+    // Check fast movement while armed
+    if (isArmed && pSpeed > 25) {
+      redThreatPersonIds.add(pA.id)
+      heldList.forEach((w) => redThreatWeaponIds.add(w.id))
+    }
+    // High-speed sudden charge/rush
+    if (pSpeed > 55) {
+      redThreatPersonIds.add(pA.id)
+    }
+    if (effectiveRiskLevel === 'HIGH' && isArmed) {
+      redThreatPersonIds.add(pA.id)
+      heldList.forEach((w) => redThreatWeaponIds.add(w.id))
+    }
+
+    // Direction of the object in hand of Person A towards Person B
+    people.forEach((pB) => {
+      if (pB.id === pA.id) return
+
+      const pB_cx = (pB.bbox.x1 + pB.bbox.x2) / 2
+      const pB_cy = (pB.bbox.y1 + pB.bbox.y2) / 2
+      const dAB_x = pB_cx - pA_cx
+      const dAB_y = pB_cy - pA_cy
+      const distAB = Math.hypot(dAB_x, dAB_y)
+
+      if (distAB > 450) return // beyond interaction proximity
+
+      heldList.forEach((w) => {
+        const w_cx = (w.bbox.x1 + w.bbox.x2) / 2
+        const w_cy = (w.bbox.y1 + w.bbox.y2) / 2
+        // Displacement vector of held object relative to Person A's torso center
+        const dAW_x = w_cx - pA_cx
+        const dAW_y = w_cy - pA_cy
+        const lenAW = Math.hypot(dAW_x, dAW_y)
+
+        let isPointed = false
+        if (lenAW > 4 && distAB > 10) {
+          const cosSim = (dAW_x * dAB_x + dAW_y * dAB_y) / (lenAW * distAB)
+          // Weapon held out/extended towards Person B
+          if (cosSim > 0.32) {
+            isPointed = true
+          }
+        }
+
+        // Armed approach vector
+        let isArmedAdvance = false
+        if (pSpeed > 14 && distAB > 10) {
+          const radA = (pA.direction || 0) * (Math.PI / 180)
+          const moveCosSim = (Math.cos(radA) * dAB_x + Math.sin(radA) * dAB_y) / distAB
+          if (moveCosSim > 0.42) {
+            isArmedAdvance = true
+          }
+        }
+
+        if (isPointed || isArmedAdvance) {
+          redThreatPersonIds.add(pA.id)
+          redThreatWeaponIds.add(w.id)
+          targetedPersonIds.add(pB.id)
+          pointingThreatVectors.push({
+            fromPerson: pA,
+            toPerson: pB,
+            weapon: w,
+            reason: isPointed ? 'POINTED AT' : 'RAPID APPROACH',
+            dist: distAB,
+          })
+        }
+      })
     })
   })
 
@@ -431,13 +535,14 @@ export function VideoPanel({
           />
         )}
 
-        {/* Top Overlay Banner */}
-        {(isHighRisk || isMedRisk) && (
-          <div
-            id="video-top-banner"
-            className="relative z-20 m-space-md flex items-center justify-between px-space-md py-2.5 rounded-lg bg-surface-container-low/90 backdrop-blur-md border border-surface-border/80 transition-all duration-300"
-          >
-            <div className="flex items-center gap-space-sm">
+        {/* Top Overlay Banner with Color Tracking Legend */}
+        <div className="relative z-20 m-space-md flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          {/* Risk Alert / Status pill */}
+          {(isHighRisk || isMedRisk) ? (
+            <div
+              id="video-top-banner"
+              className="flex items-center gap-space-sm px-space-md py-2 rounded-lg bg-surface-container-low/95 backdrop-blur-md border border-surface-border/80 transition-all duration-300"
+            >
               <span className="flex h-2.5 w-2.5 relative">
                 <span
                   className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isHighRisk ? 'bg-status-high' : 'bg-status-medium'
@@ -448,34 +553,51 @@ export function VideoPanel({
                     }`}
                 ></span>
               </span>
-              <div className="flex items-baseline gap-space-xs">
-                <span
-                  className={`font-semibold text-xs tracking-tight ${isHighRisk ? 'text-status-high' : 'text-status-medium'
-                    }`}
-                >
-                  {isHighRisk
-                    ? 'POTENTIAL SAFETY RISK DETECTED'
-                    : 'ELEVATED PROXIMITY CAUTION'}
-                </span>
-                <span
-                  className={`font-mono text-[11px] px-1.5 py-0.5 rounded font-bold ${isHighRisk
-                      ? 'bg-status-high/20 text-status-high'
-                      : 'bg-status-medium/20 text-status-medium'
-                    }`}
-                >
-                  {((frame?.risk_score || 0.84) * 100).toFixed(0)}% SCORE
-                </span>
-              </div>
-            </div>
-            <div className="hidden sm:flex items-center gap-space-sm font-mono text-[11px] text-text-muted">
-              <span>
-                PERSISTED: <strong className="text-on-surface">1.3s</strong> (WINDOW: 1.0s)
+              <span
+                className={`font-mono text-xs font-bold tracking-wide uppercase ${isHighRisk ? 'text-status-high' : 'text-status-medium'
+                  }`}
+              >
+                {isHighRisk ? 'CRITICAL SAFETY HAZARD DETECTED' : 'ELEVATED ACTIVITY MONITORING'}
               </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-surface-variant"></span>
-              <span className="text-primary font-semibold">EVENT #894</span>
+              <span
+                className={`font-mono text-[11px] px-1.5 py-0.5 rounded font-bold ${isHighRisk
+                    ? 'bg-status-high/20 text-status-high'
+                    : 'bg-status-medium/20 text-status-medium'
+                  }`}
+              >
+                {((frame?.risk_score || 0.84) * 100).toFixed(0)}% SCORE
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low/85 backdrop-blur-md border border-surface-border/60">
+              <span className="w-2 h-2 rounded-full bg-status-low animate-pulse"></span>
+              <span className="font-mono text-[11px] text-text-primary font-semibold">
+                SURVEILLANCE ACTIVE · PERIMETER SECURE
+              </span>
+            </div>
+          )}
+
+          {/* Color Code Tracking Legend Pill */}
+          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-surface-container-low/90 backdrop-blur-md border border-surface-border/70 text-[10px] font-mono shadow-sm">
+            <span className="text-text-muted uppercase font-bold tracking-wider hidden md:inline">HUD MODES:</span>
+            <div className="flex items-center gap-1.5" title="Blue: Normal Person Tracking">
+              <span className="w-2 h-2 rounded-full bg-[#38bdf8] ring-1 ring-[#38bdf8]/40"></span>
+              <span className="text-[#38bdf8] font-bold">NORMAL</span>
+            </div>
+            <div className="flex items-center gap-1.5" title="Yellow: Person holding any Blunt Object">
+              <span className="w-2 h-2 rounded-full bg-[#facc15] ring-1 ring-[#facc15]/40"></span>
+              <span className="text-[#facc15] font-bold">BLUNT OBJ</span>
+            </div>
+            <div className="flex items-center gap-1.5" title="Orange: Sharp Objects">
+              <span className="w-2 h-2 rounded-full bg-[#f97316] ring-1 ring-[#f97316]/40"></span>
+              <span className="text-[#f97316] font-bold">SHARP OBJ</span>
+            </div>
+            <div className="flex items-center gap-1.5" title="Red: Fast Movements / Pointed Towards Person B">
+              <span className="w-2 h-2 rounded-full bg-[#ef4444] animate-pulse ring-1 ring-[#ef4444]/50"></span>
+              <span className="text-[#ef4444] font-bold">THREAT</span>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Bounding Boxes & SVG Overlay */}
         <div className="absolute inset-0 z-10 pointer-events-none">
@@ -497,7 +619,7 @@ export function VideoPanel({
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8" />
               </marker>
               <marker
-                id="arrow-object"
+                id="arrow-sharp"
                 viewBox="0 0 10 10"
                 refX="5"
                 refY="5"
@@ -505,10 +627,93 @@ export function VideoPanel({
                 markerHeight="4"
                 orient="auto-start-reverse"
               >
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="#fb923c" />
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#f97316" />
+              </marker>
+              <marker
+                id="arrow-blunt"
+                viewBox="0 0 10 10"
+                refX="5"
+                refY="5"
+                markerWidth="4"
+                markerHeight="4"
+                orient="auto-start-reverse"
+              >
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#facc15" />
+              </marker>
+              <marker
+                id="arrow-threat"
+                viewBox="0 0 10 10"
+                refX="5"
+                refY="5"
+                markerWidth="4"
+                markerHeight="4"
+                orient="auto-start-reverse"
+              >
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" />
               </marker>
             </defs>
-            {/* Holding Relationship Tethers (Person <-> Held Sharp Object) */}
+
+            {/* Red Threat Vectors: Direction of object in hand of Person A pointed towards Person B */}
+            {pointingThreatVectors.map((tv, idx) => {
+              const w_cx = (tv.weapon.bbox.x1 + tv.weapon.bbox.x2) / 2
+              const w_cy = (tv.weapon.bbox.y1 + tv.weapon.bbox.y2) / 2
+              const pB_cx = (tv.toPerson.bbox.x1 + tv.toPerson.bbox.x2) / 2
+              const pB_y = Math.max(tv.toPerson.bbox.y1, 14)
+              const midX = (w_cx + pB_cx) / 2
+              const midY = (w_cy + pB_y) / 2
+
+              return (
+                <g key={`threat-vector-${tv.fromPerson.id}-${tv.toPerson.id}-${idx}`}>
+                  {/* Pointing Laser Line */}
+                  <line
+                    x1={w_cx}
+                    y1={w_cy}
+                    x2={pB_cx}
+                    y2={pB_y}
+                    stroke="#ef4444"
+                    strokeWidth="2.5"
+                    strokeDasharray="6 3"
+                    className="animate-pulse"
+                  />
+                  {/* Glowing Target Reticle on Targeted Person B */}
+                  <circle
+                    cx={pB_cx}
+                    cy={pB_y}
+                    r="18"
+                    fill="none"
+                    stroke="#ef4444"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 2"
+                    className="animate-spin"
+                    style={{ transformOrigin: `${pB_cx}px ${pB_y}px`, animationDuration: '3s' }}
+                  />
+                  {/* Floating Warning Pill */}
+                  <rect
+                    x={midX - 74}
+                    y={midY - 11}
+                    width="148"
+                    height="22"
+                    rx="4"
+                    fill="rgba(15, 2, 2, 0.95)"
+                    stroke="#ef4444"
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x={midX}
+                    y={midY + 4}
+                    fill="#ef4444"
+                    fontSize="8.5"
+                    fontWeight="bold"
+                    fontFamily="JetBrains Mono, monospace"
+                    textAnchor="middle"
+                  >
+                    ⚠ {tv.reason}: PERSON #{tv.toPerson.id}
+                  </text>
+                </g>
+              )
+            })}
+
+            {/* Holding Relationship Tethers (Person <-> Held Object) */}
             {holdingPairs.map((pair, idx) => {
               const p_cx = (pair.person.bbox.x1 + pair.person.bbox.x2) / 2
               const p_top_y = Math.max(pair.person.bbox.y1, 14)
@@ -517,9 +722,22 @@ export function VideoPanel({
               const midX = (p_cx + w_cx) / 2
               const midY = (p_top_y + w_top_y) / 2
 
-              const score = frame?.risk_score ?? 0
-              const linkColor =
-                score >= 0.70 || effectiveRiskLevel === 'HIGH' ? '#ef4444' : '#fde047'
+              const isRed = redThreatPersonIds.has(pair.person.id) || redThreatWeaponIds.has(pair.weapon.id)
+              const linkColor = isRed
+                ? '#ef4444'
+                : pair.isBlunt
+                  ? '#facc15'
+                  : pair.isSharp
+                    ? '#f97316'
+                    : '#fde047'
+
+              const tetherLabel = isRed
+                ? '⚠ THREAT OBJECT'
+                : pair.isBlunt
+                  ? '⚠ BLUNT OBJECT'
+                  : pair.isSharp
+                    ? '⚠ SHARP OBJECT'
+                    : '⚠ HELD OBJECT'
 
               return (
                 <g key={`holding-tether-${pair.person.id}-${pair.weapon.id}-${idx}`}>
@@ -534,9 +752,9 @@ export function VideoPanel({
                     className="animate-pulse"
                   />
                   <rect
-                    x={midX - 42}
+                    x={midX - 48}
                     y={midY - 9}
-                    width="84"
+                    width="96"
                     height="18"
                     rx="4"
                     fill="rgba(5, 15, 24, 0.94)"
@@ -552,7 +770,7 @@ export function VideoPanel({
                     fontFamily="JetBrains Mono, monospace"
                     textAnchor="middle"
                   >
-                    ⚠ HELD OBJECT
+                    {tetherLabel}
                   </text>
                 </g>
               )
@@ -571,6 +789,7 @@ export function VideoPanel({
                   if (dist > 320) return null
                   const midX = (p_cx + o_cx) / 2
                   const midY = (p_top_y + o_top_y) / 2
+                  const proxColor = isBluntObj(obj) ? '#facc15' : isSharpObj(obj) ? '#f97316' : '#fb923c'
                   return (
                     <g key={`proximity-${person.id}-${obj.id}`}>
                       <line
@@ -578,7 +797,7 @@ export function VideoPanel({
                         y1={p_top_y}
                         x2={o_cx}
                         y2={o_top_y}
-                        stroke="#fb923c"
+                        stroke={proxColor}
                         strokeWidth="1.5"
                         strokeDasharray="3 3"
                         strokeOpacity="0.75"
@@ -590,13 +809,13 @@ export function VideoPanel({
                         height="15"
                         rx="3"
                         fill="rgba(5, 15, 24, 0.9)"
-                        stroke="#fb923c"
+                        stroke={proxColor}
                         strokeWidth="1"
                       />
                       <text
                         x={midX}
                         y={midY + 2.5}
-                        fill="#fb923c"
+                        fill={proxColor}
                         fontSize="8.5"
                         fontWeight="bold"
                         fontFamily="JetBrains Mono, monospace"
@@ -614,36 +833,48 @@ export function VideoPanel({
               const isPerson = obj.class_name.toLowerCase() === 'person'
               const isUnsafe =
                 unsafeClasses.includes(obj.class_name) ||
-                ['knife', 'scissors', 'gun', 'weapon', 'baseball bat'].includes(obj.class_name)
+                ['knife', 'scissors', 'gun', 'weapon', 'baseball bat', 'bat', 'crowbar', 'blade'].includes(obj.class_name)
 
-              const isHoldingWeapon = isPerson && holdingPersonIds.has(obj.id)
-              const isHeldWeapon = isUnsafe && heldObjectIds.has(obj.id)
+              // 4-Tier Color Scheme Implementation:
+              // 1. Blue: Normal person tracking
+              // 2. Yellow: Person holding any Blunt Object (or blunt object itself)
+              // 3. Orange: Sharp objects (knives, scissors, blades, cutters)
+              // 4. Red: Fast movements / holding object pointed towards person B / high threat
+              let color = '#38bdf8' // Default Blue (Normal person tracking)
+              let roleType = 'normal' // 'normal' | 'blunt' | 'sharp' | 'red'
 
-              const score = frame?.risk_score ?? 0
+              if (isPerson) {
+                const heldList = personHeldObjects.get(obj.id) || []
+                const hasBlunt = heldList.some((w) => isBluntObj(w))
+                const hasSharp = heldList.some((w) => isSharpObj(w))
 
-              // Dynamic color according to risk score & holding state
-              let color = '#38bdf8' // Default calm blue for normal person
-              if (isHoldingWeapon || isHeldWeapon) {
-                if (score >= 0.70 || effectiveRiskLevel === 'HIGH') {
-                  color = '#ef4444' // Crimson High Risk
+                if (redThreatPersonIds.has(obj.id)) {
+                  color = '#ef4444' // Red Threat
+                  roleType = 'red'
+                } else if (hasBlunt) {
+                  color = '#facc15' // Yellow (Person holding Blunt Object)
+                  roleType = 'blunt'
+                } else if (hasSharp) {
+                  color = '#f97316' // Orange (Person holding Sharp Object)
+                  roleType = 'sharp'
                 } else {
-                  color = '#fde047' // Light Yellow for person holding sharp object / held object
+                  color = '#38bdf8' // Blue (Normal Person Tracking)
+                  roleType = 'normal'
                 }
-              } else if (isUnsafe) {
-                if (score >= 0.70 || effectiveRiskLevel === 'HIGH') {
-                  color = '#ef4444'
-                } else if (score >= 0.30 || effectiveRiskLevel === 'MEDIUM') {
-                  color = '#fde047' // Light Yellow
+              } else {
+                // Object / Weapon
+                if (redThreatWeaponIds.has(obj.id)) {
+                  color = '#ef4444' // Red (weapon involved in threat)
+                  roleType = 'red'
+                } else if (isBluntObj(obj)) {
+                  color = '#facc15' // Yellow (Blunt Object)
+                  roleType = 'blunt'
+                } else if (isSharpObj(obj)) {
+                  color = '#f97316' // Orange (Sharp Object)
+                  roleType = 'sharp'
                 } else {
-                  color = '#fb923c' // Amber for separate weapon
-                }
-              } else if (isPerson) {
-                if (score >= 0.70 || effectiveRiskLevel === 'HIGH') {
-                  color = '#f87171' // Elevated
-                } else if (score >= 0.30 || effectiveRiskLevel === 'MEDIUM') {
-                  color = '#fde047' // Light Yellow
-                } else {
-                  color = '#38bdf8' // Calm Blue
+                  color = '#fb923c' // Amber for other hazardous objects
+                  roleType = 'sharp'
                 }
               }
 
@@ -658,22 +889,45 @@ export function VideoPanel({
               const vx = cx + Math.cos(rad) * vecLen
               const vy = top_y + Math.sin(rad) * vecLen
 
-              const hazardCat = getHazardCategory(obj.class_name, obj.category)
-              // Badge Label
+              // Badge Label text
               let labelText = ''
-              if (isHoldingWeapon) {
-                labelText = `PERSON #${obj.id} · HOLDING ${hazardCat ? hazardCat.toUpperCase() : 'SHARP OBJECTS'}`
-              } else if (isHeldWeapon) {
-                labelText = `${hazardCat ? hazardCat.toUpperCase() : obj.class_name.toUpperCase()} #${obj.id} · HELD`
-              } else if (isUnsafe) {
-                labelText = `${hazardCat ? hazardCat.toUpperCase() : obj.class_name.toUpperCase()} #${obj.id} · ${(obj.confidence * 100).toFixed(0)}%`
+              if (isPerson) {
+                if (roleType === 'red') {
+                  const ptVector = pointingThreatVectors.find((v) => v.fromPerson.id === obj.id)
+                  if (ptVector) {
+                    labelText = `⚠ PERSON #${obj.id} · ${ptVector.reason} PERSON #${ptVector.toPerson.id}`
+                  } else if (obj.speed && obj.speed > 25) {
+                    labelText = `⚠ PERSON #${obj.id} · RAPID MOVEMENT (${obj.speed.toFixed(0)}px/s)`
+                  } else {
+                    labelText = `⚠ PERSON #${obj.id} · CRITICAL THREAT`
+                  }
+                } else if (roleType === 'blunt') {
+                  labelText = `PERSON #${obj.id} · HOLDING BLUNT OBJECT`
+                } else if (roleType === 'sharp') {
+                  labelText = `PERSON #${obj.id} · HOLDING SHARP OBJECT`
+                } else {
+                  labelText = `PERSON #${obj.id} · ${(obj.confidence * 100).toFixed(0)}%`
+                }
               } else {
-                labelText = `${obj.class_name.toUpperCase()} #${obj.id} · ${(obj.confidence * 100).toFixed(0)}%`
+                const isHeld = heldObjectIds.has(obj.id)
+                if (roleType === 'red') {
+                  labelText = `⚠ ${isSharpObj(obj) ? 'SHARP OBJECT' : isBluntObj(obj) ? 'BLUNT OBJECT' : 'WEAPON'} #${obj.id} · POINTED/ACTIVE`
+                } else if (roleType === 'blunt') {
+                  labelText = `BLUNT OBJECT #${obj.id}${isHeld ? ' · HELD' : ''} · ${(obj.confidence * 100).toFixed(0)}%`
+                } else if (roleType === 'sharp') {
+                  labelText = `SHARP OBJECT #${obj.id}${isHeld ? ' · HELD' : ''} · ${(obj.confidence * 100).toFixed(0)}%`
+                } else {
+                  labelText = `${obj.class_name.toUpperCase()} #${obj.id} · ${(obj.confidence * 100).toFixed(0)}%`
+                }
               }
 
-              const badgeWidth = Math.min(labelText.length * 6.4 + 16, 210)
+              const badgeWidth = Math.min(labelText.length * 6.6 + 18, 230)
               const badgeX = Math.max(cx - badgeWidth / 2, 4)
               const badgeY = Math.max(top_y - 24, 4)
+
+              // Outer ping animation speed matched to risk severity
+              const pingDuration =
+                roleType === 'red' ? '0.75s' : roleType === 'sharp' ? '1.4s' : roleType === 'blunt' ? '2.0s' : '3.0s'
 
               return (
                 <g key={`tracker-circle-${obj.id}`}>
@@ -696,12 +950,12 @@ export function VideoPanel({
                     r="15"
                     fill="none"
                     stroke={color}
-                    strokeWidth="1"
-                    strokeOpacity="0.35"
+                    strokeWidth="1.2"
+                    strokeOpacity="0.4"
                     className="animate-ping"
                     style={{
                       transformOrigin: `${cx}px ${top_y}px`,
-                      animationDuration: isHoldingWeapon || isHeldWeapon ? '1.4s' : '2.8s',
+                      animationDuration: pingDuration,
                     }}
                   />
 
@@ -713,8 +967,8 @@ export function VideoPanel({
                     fill="none"
                     stroke={color}
                     strokeWidth="1.6"
-                    strokeDasharray={isUnsafe ? '3 2' : 'none'}
-                    className={isHoldingWeapon || isHeldWeapon ? 'animate-pulse' : ''}
+                    strokeDasharray={roleType !== 'normal' ? '3 2' : 'none'}
+                    className={roleType === 'red' ? 'animate-pulse' : ''}
                   />
 
                   {/* Concentric Circle 3: Middle Ring */}
@@ -751,7 +1005,15 @@ export function VideoPanel({
                       y2={vy}
                       stroke={color}
                       strokeWidth="2"
-                      markerEnd={isPerson ? 'url(#arrow-person)' : 'url(#arrow-object)'}
+                      markerEnd={
+                        roleType === 'red'
+                          ? 'url(#arrow-threat)'
+                          : roleType === 'blunt'
+                            ? 'url(#arrow-blunt)'
+                            : roleType === 'sharp'
+                              ? 'url(#arrow-sharp)'
+                              : 'url(#arrow-person)'
+                      }
                     />
                   )}
 

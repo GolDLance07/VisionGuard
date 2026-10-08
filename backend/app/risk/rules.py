@@ -85,7 +85,13 @@ def rule_holding_weapon(
 
             # Hand/body association score
             score = 0.0
-            if overlap_ratio >= 0.35 or edge_dist == 0.0:
+            if getattr(person, "pose_arm_pointing", False):
+                score = 1.0
+            elif getattr(person, "pose_weapon_raised", False):
+                score = 1.0
+            elif getattr(person, "is_holding_weapon", False) or getattr(weapon, "is_held", False):
+                score = 1.0
+            elif overlap_ratio >= 0.35 or edge_dist == 0.0:
                 score = 1.0
             elif edge_dist < 25.0:
                 score = max(0.5, 1.0 - (edge_dist / 25.0))
@@ -95,7 +101,12 @@ def rule_holding_weapon(
             if score > max_holding_score:
                 max_holding_score = score
                 cat = getattr(weapon, "category", None) or get_hazard_category(weapon.class_name)
-                holding_details = f"Weapon ({cat}) held or brandished in hand by person {person.id}"
+                if getattr(person, "pose_arm_pointing", False):
+                    holding_details = f"Weapon ({cat}) POINTED towards another person by person {person.id} (Pose-verified)"
+                elif getattr(person, "pose_weapon_raised", False):
+                    holding_details = f"Weapon ({cat}) RAISED in strike posture by person {person.id} (Pose-verified)"
+                else:
+                    holding_details = f"Weapon ({cat}) held or brandished in hand by person {person.id}"
 
     if max_holding_score <= 0.0:
         return 0.0, None

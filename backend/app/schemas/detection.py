@@ -77,6 +77,8 @@ class DetectedObject(BaseModel):
     is_holding_weapon: bool = False
     is_held: bool = False
     held_by_id: int | None = None
+    pose_arm_pointing: bool = False
+    pose_weapon_raised: bool = False
 
 
 class RiskReason(BaseModel):
