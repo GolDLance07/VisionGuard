@@ -470,11 +470,10 @@ export function IncidentHistory({ incidents = [], onClear }) {
                     <tr
                       key={item.id}
                       onClick={() => setSelectedId(item.id)}
-                      className={`cursor-pointer transition-colors ${
-                        isSelected
+                      className={`cursor-pointer transition-colors ${isSelected
                           ? 'bg-surface-container-highest/70 border-l-4 border-l-status-high'
                           : 'hover:bg-surface-container'
-                      }`}
+                        }`}
                     >
                       <td className="py-space-sm px-space-md font-mono text-sm text-primary flex items-center gap-space-xs font-bold">
                         {isHigh && (
@@ -498,11 +497,10 @@ export function IncidentHistory({ incidents = [], onClear }) {
                       </td>
                       <td className="py-space-sm px-space-sm">
                         <span
-                          className={`inline-flex items-center gap-1 px-space-xs py-0.5 rounded font-mono text-[11px] font-bold ${
-                            isHigh
+                          className={`inline-flex items-center gap-1 px-space-xs py-0.5 rounded font-mono text-[11px] font-bold ${isHigh
                               ? 'bg-status-high/15 text-status-high'
                               : 'bg-status-medium/15 text-status-medium'
-                          }`}
+                            }`}
                         >
                           {(item.riskScore * 100).toFixed(0)}% {item.riskLevel}
                         </span>
@@ -512,13 +510,12 @@ export function IncidentHistory({ incidents = [], onClear }) {
                       </td>
                       <td className="py-space-sm px-space-md text-right">
                         <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[10px] uppercase font-semibold ${
-                            currentStatus === 'Requires Review'
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[10px] uppercase font-semibold ${currentStatus === 'Requires Review'
                               ? 'bg-status-high/20 text-status-high'
                               : currentStatus.includes('Verified')
-                              ? 'bg-status-high text-surface-container-lowest font-bold'
-                              : 'bg-surface-container-highest text-text-muted'
-                          }`}
+                                ? 'bg-status-high text-surface-container-lowest font-bold'
+                                : 'bg-surface-container-highest text-text-muted'
+                            }`}
                         >
                           {currentStatus === 'Requires Review' && (
                             <span className="w-1.5 h-1.5 rounded-full bg-status-high animate-pulse"></span>
@@ -720,12 +717,32 @@ export function IncidentHistory({ incidents = [], onClear }) {
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-xs">
                   <button
-                    onClick={() => handleStatusChange('Verified Hazard')}
-                    className="h-9 px-space-sm flex items-center justify-center gap-space-xs rounded-lg bg-status-high/20 hover:bg-status-high/30 text-status-high font-semibold text-xs transition-colors border border-status-high/40"
+                    onClick={() => {
+                      const currentStatus = statusMap[activeIncident.id] || activeIncident.status;
+                      handleStatusChange(currentStatus === 'Verified Hazard' ? 'Requires Review' : 'Verified Hazard');
+                    }}
+                    aria-pressed={(statusMap[activeIncident.id] || activeIncident.status) === 'Verified Hazard'}
+                    className={`h-9 px-space-sm flex items-center justify-center gap-space-xs rounded-lg font-semibold text-xs transition-colors border ${(statusMap[activeIncident.id] || activeIncident.status) === 'Verified Hazard'
+                        ? 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border-emerald-500/40'
+                        : 'bg-status-high/20 hover:bg-status-high/30 text-status-high border-status-high/40'
+                      }`}
+                    title={
+                      (statusMap[activeIncident.id] || activeIncident.status) === 'Verified Hazard'
+                        ? 'Click to remove verification'
+                        : 'Mark this incident as a verified hazard'
+                    }
                     type="button"
                   >
-                    <span className="material-symbols-outlined text-[18px]">verified</span>
-                    <span>Mark Verified Hazard</span>
+                    <span className="material-symbols-outlined text-[18px]">
+                      {(statusMap[activeIncident.id] || activeIncident.status) === 'Verified Hazard'
+                        ? 'check_circle'
+                        : 'verified'}
+                    </span>
+                    <span>
+                      {(statusMap[activeIncident.id] || activeIncident.status) === 'Verified Hazard'
+                        ? '✓ Verified Hazard'
+                        : 'Mark Verified Hazard'}
+                    </span>
                   </button>
                   <button
                     onClick={() => handleStatusChange('Flagged Benign')}
