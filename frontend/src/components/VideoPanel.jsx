@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import JSZip from 'jszip'
 
 export function VideoPanel({
   frame,
@@ -25,12 +26,100 @@ export function VideoPanel({
   const [isSourceMenuOpen, setIsSourceMenuOpen] = useState(false)
   const [streamUrlInput, setStreamUrlInput] = useState('')
   const [showStreamModal, setShowStreamModal] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
   const fileInputRef = useRef(null)
   const videoContainerRef = useRef(null)
   const menuRef = useRef(null)
   const lastSoundTimeRef = useRef(0)
   const lastVoiceTimeRef = useRef({})
+  const telemetryHistoryRef = useRef([])
+
+  // Track telemetry history in a rolling buffer (~10 seconds window)
+  useEffect(() => {
+    if (!frame) return
+    const now = Date.now()
+    telemetryHistoryRef.current.push({
+      ts: now,
+      iso: new Date(now).toISOString(),
+      frame: frame.frame_index || 0,
+      risk_score: frame.risk_score || 0,
+      fps: frame.fps || 0,
+      latency_ms: frame.latency_ms || 0,
+      detections: (frame.objects || []).map((obj) => ({
+        class: obj.class_name,
+        confidence: Number((obj.confidence || 0).toFixed(3)),
+        bbox: obj.bbox ? [obj.bbox.x1, obj.bbox.y1, obj.bbox.x2, obj.bbox.y2] : [],
+        speed: obj.speed || 0,
+      })),
+    })
+
+    // Prune entries older than 10,000 ms
+    const cutoff = now - 10000
+    while (
+      telemetryHistoryRef.current.length > 0 &&
+      telemetryHistoryRef.current[0].ts < cutoff
+    ) {
+      telemetryHistoryRef.current.shift()
+    }
+  }, [frame])
+
+  // Helper function to export complete incident package ZIP
+  const handleExportIncidentPackage = async () => {
+    setIsExporting(true)
+    try {
+      const zip = new JSZip()
+      const now = Date.now()
+      const timestampIso = new Date(now).toISOString()
+
+      // 1. Add snapshot image if available
+      if (frame?.frame) {
+        zip.file('snapshot.jpg', frame.frame, { base64: true })
+      }
+
+      // 2. Add full telemetry JSON log
+      const telemetryPackage = {
+        schema: 'incident-package/v1',
+        exportedAt: timestampIso,
+        source: source || 'local_clip',
+        sessionId: sessionId || null,
+        currentFrame: {
+          riskScore: frame?.risk_score || 0,
+          effectiveRiskLevel: effectiveRiskLevel || 'LOW',
+          fps: frame?.fps || 0,
+          latencyMs: frame?.latency_ms || 0,
+          objects: frame?.objects || [],
+        },
+        telemetryHistory: telemetryHistoryRef.current,
+      }
+      zip.file('telemetry.json', JSON.stringify(telemetryPackage, null, 2))
+
+      // 3. Add clip placeholder / manifest
+      const clipMetadata = {
+        status: 'clip_buffered',
+        samplesCount: telemetryHistoryRef.current.length,
+        timeWindowMs: 10000,
+        exportedAt: timestampIso,
+      }
+      zip.file('clip_info.json', JSON.stringify(clipMetadata, null, 2))
+
+      // Generate & Trigger Browser Download
+      const content = await zip.generateAsync({ type: 'blob' })
+      const url = URL.createObjectURL(content)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `incident-package-${timestampIso.replace(/[:.]/g, '-')}.zip`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Failed to export incident package:', err)
+      alert('Error creating incident package ZIP file.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -556,7 +645,7 @@ export function VideoPanel({
             </span>
             <span className="text-outline-variant hidden sm:inline">·</span>
 
-            {/* PROBLEM 4 FIX: Interactive Source Pill Switcher Dropdown */}
+            {/* Interactive Source Pill Switcher Dropdown */}
             <div className="relative inline-block" ref={menuRef}>
               <button
                 id="source-pill-button"
@@ -729,22 +818,16 @@ export function VideoPanel({
           >
             <span className="material-symbols-outlined text-[18px]">photo_camera</span>
           </button>
+          {/* Export Incident Package Button */}
           <button
-            className="w-9 h-9 rounded-lg bg-surface-container-high hover:bg-surface-container-highest border border-surface-border/60 flex items-center justify-center text-text-primary transition-colors"
-            title="Export Diagnostics Telemetry"
-            onClick={() => {
-              const blob = new Blob([JSON.stringify(frame || {}, null, 2)], {
-                type: 'application/json',
-              })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = `vision-guard-telemetry-${Date.now()}.json`
-              a.click()
-            }}
+            className="h-9 px-3 rounded-lg bg-surface-container-high hover:bg-surface-container-highest border border-surface-border/60 flex items-center justify-center text-text-primary transition-colors text-xs font-semibold gap-1.5"
+            title="Export Incident Package (ZIP)"
+            onClick={handleExportIncidentPackage}
+            disabled={isExporting}
             type="button"
           >
-            <span className="material-symbols-outlined text-[18px]">download</span>
+            <span className="material-symbols-outlined text-[18px]">folder_zip</span>
+            <span>{isExporting ? 'Packaging...' : 'Export Package (ZIP)'}</span>
           </button>
         </div>
       </div>
