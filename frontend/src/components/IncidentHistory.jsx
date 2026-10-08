@@ -8,6 +8,9 @@ export function IncidentHistory({ incidents = [], onClear }) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [notes, setNotes] = useState('')
   const [statusMap, setStatusMap] = useState({})
+  const [dateRange, setDateRange] = useState('TODAY')
+  const [customStartDate, setCustomStartDate] = useState('')
+  const [customEndDate, setCustomEndDate] = useState('')
 
   // If no incidents captured yet, populate with realistic audit trail seed items
   const seedIncidents = [
@@ -169,6 +172,23 @@ export function IncidentHistory({ incidents = [], onClear }) {
         inc.source.toLowerCase().includes(q)
       if (!match) return false
     }
+
+    // Date Filtering Logic
+    if (dateRange === '7D') {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+      if (inc.timestamp < sevenDaysAgo) return false
+    } else if (dateRange === 'CUSTOM') {
+      if (customStartDate) {
+        const startMs = new Date(customStartDate).getTime()
+        if (inc.timestamp < startMs) return false
+      }
+      if (customEndDate) {
+        // Set to end of the selected day (23:59:59)
+        const endMs = new Date(customEndDate).setHours(23, 59, 59, 999)
+        if (inc.timestamp > endMs) return false
+      }
+    }
+
     if (severityFilter === 'HIGH') {
       if (inc.riskLevel !== 'HIGH' && inc.riskLevel !== 'high') return false
     } else if (severityFilter === 'MEDIUM') {
@@ -312,15 +332,41 @@ export function IncidentHistory({ incidents = [], onClear }) {
           </div>
 
           {/* Date Range Dropdown */}
-          <div className="lg:col-span-3 relative">
-            <select className="w-full h-10 px-space-sm rounded-lg bg-surface-container-highest text-on-surface font-semibold text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer pr-8 border border-surface-border/40">
-              <option>Today (Last 24h)</option>
-              <option>Last 7 Days</option>
-              <option>Custom Range</option>
-            </select>
-            <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-text-muted text-[18px] pointer-events-none">
-              calendar_today
-            </span>
+          {/* Date Range Dropdown & Custom Inputs */}
+          <div className="lg:col-span-3 flex flex-col sm:flex-row gap-space-xs">
+            <div className="relative w-full">
+              <select
+                value={dateRange}
+                onChange={(e) => setDateRange(e.target.value)}
+                className="w-full h-10 px-space-sm rounded-lg bg-surface-container-highest text-on-surface font-semibold text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer pr-8 border border-surface-border/40"
+              >
+                <option value="TODAY">Today (Last 24h)</option>
+                <option value="7D">Last 7 Days</option>
+                <option value="CUSTOM">Custom Range</option>
+              </select>
+              <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-text-muted text-[18px] pointer-events-none">
+                calendar_today
+              </span>
+            </div>
+
+            {/* Render Date Inputs when Custom Range is selected */}
+            {dateRange === 'CUSTOM' && (
+              <div className="flex items-center gap-1.5 bg-surface-container-highest px-2 py-1 rounded-lg border border-surface-border/40">
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="bg-transparent text-on-surface text-[11px] font-mono focus:outline-none cursor-pointer scheme-dark"
+                />
+                <span className="text-text-muted text-xs">-</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="bg-transparent text-on-surface text-[11px] font-mono focus:outline-none cursor-pointer scheme-dark"
+                />
+              </div>
+            )}
           </div>
 
           {/* Source Camera Dropdown */}
@@ -471,8 +517,8 @@ export function IncidentHistory({ incidents = [], onClear }) {
                       key={item.id}
                       onClick={() => setSelectedId(item.id)}
                       className={`cursor-pointer transition-colors ${isSelected
-                          ? 'bg-surface-container-highest/70 border-l-4 border-l-status-high'
-                          : 'hover:bg-surface-container'
+                        ? 'bg-surface-container-highest/70 border-l-4 border-l-status-high'
+                        : 'hover:bg-surface-container'
                         }`}
                     >
                       <td className="py-space-sm px-space-md font-mono text-sm text-primary flex items-center gap-space-xs font-bold">
@@ -498,8 +544,8 @@ export function IncidentHistory({ incidents = [], onClear }) {
                       <td className="py-space-sm px-space-sm">
                         <span
                           className={`inline-flex items-center gap-1 px-space-xs py-0.5 rounded font-mono text-[11px] font-bold ${isHigh
-                              ? 'bg-status-high/15 text-status-high'
-                              : 'bg-status-medium/15 text-status-medium'
+                            ? 'bg-status-high/15 text-status-high'
+                            : 'bg-status-medium/15 text-status-medium'
                             }`}
                         >
                           {(item.riskScore * 100).toFixed(0)}% {item.riskLevel}
@@ -511,10 +557,10 @@ export function IncidentHistory({ incidents = [], onClear }) {
                       <td className="py-space-sm px-space-md text-right">
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[10px] uppercase font-semibold ${currentStatus === 'Requires Review'
-                              ? 'bg-status-high/20 text-status-high'
-                              : currentStatus.includes('Verified')
-                                ? 'bg-status-high text-surface-container-lowest font-bold'
-                                : 'bg-surface-container-highest text-text-muted'
+                            ? 'bg-status-high/20 text-status-high'
+                            : currentStatus.includes('Verified')
+                              ? 'bg-status-high text-surface-container-lowest font-bold'
+                              : 'bg-surface-container-highest text-text-muted'
                             }`}
                         >
                           {currentStatus === 'Requires Review' && (
@@ -723,8 +769,8 @@ export function IncidentHistory({ incidents = [], onClear }) {
                     }}
                     aria-pressed={(statusMap[activeIncident.id] || activeIncident.status) === 'Verified Hazard'}
                     className={`h-9 px-space-sm flex items-center justify-center gap-space-xs rounded-lg font-semibold text-xs transition-colors border ${(statusMap[activeIncident.id] || activeIncident.status) === 'Verified Hazard'
-                        ? 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border-emerald-500/40'
-                        : 'bg-status-high/20 hover:bg-status-high/30 text-status-high border-status-high/40'
+                      ? 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border-emerald-500/40'
+                      : 'bg-status-high/20 hover:bg-status-high/30 text-status-high border-status-high/40'
                       }`}
                     title={
                       (statusMap[activeIncident.id] || activeIncident.status) === 'Verified Hazard'
