@@ -161,17 +161,22 @@ export function VideoPanel({
   }, [frame, effectiveRiskLevel, soundEnabled])
 
   // Category mapping
+  // Category mapping for safety classification
   const getHazardCategory = (className, category) => {
-    if (category && category !== 'Object') return category
+    if (category && category !== 'Object') {
+      if (category === 'Sharp Object') return 'Sharp Objects'
+      if (category === 'Blunt Weapon' || category === 'Blunt Object') return 'Blunt Objects'
+      return category
+    }
     const lower = (className || '').toLowerCase()
-    if (['knife', 'scissors', 'blade', 'dagger', 'sword', 'box cutter', 'machete'].includes(lower)) {
-      return 'Sharp Object'
+    if (['knife', 'scissors', 'blade', 'dagger', 'sword', 'box cutter', 'machete', 'cutter', 'scalpel'].includes(lower)) {
+      return 'Sharp Objects'
+    }
+    if (['baseball bat', 'bat', 'crowbar', 'pipe', 'club', 'stick', 'hammer'].includes(lower)) {
+      return 'Blunt Objects'
     }
     if (['gun', 'pistol', 'rifle', 'handgun', 'shotgun', 'weapon', 'firearm'].includes(lower)) {
       return 'Firearm'
-    }
-    if (['baseball bat', 'bat', 'crowbar', 'pipe'].includes(lower)) {
-      return 'Blunt Weapon'
     }
     return 'Hazardous Object'
   }
@@ -653,12 +658,15 @@ export function VideoPanel({
               const vx = cx + Math.cos(rad) * vecLen
               const vy = top_y + Math.sin(rad) * vecLen
 
+              const hazardCat = getHazardCategory(obj.class_name, obj.category)
               // Badge Label
               let labelText = ''
               if (isHoldingWeapon) {
-                labelText = `PERSON #${obj.id} · HOLDING SHARP OBJ`
+                labelText = `PERSON #${obj.id} · HOLDING ${hazardCat ? hazardCat.toUpperCase() : 'SHARP OBJECTS'}`
               } else if (isHeldWeapon) {
-                labelText = `${obj.class_name.toUpperCase()} #${obj.id} · HELD`
+                labelText = `${hazardCat ? hazardCat.toUpperCase() : obj.class_name.toUpperCase()} #${obj.id} · HELD`
+              } else if (isUnsafe) {
+                labelText = `${hazardCat ? hazardCat.toUpperCase() : obj.class_name.toUpperCase()} #${obj.id} · ${(obj.confidence * 100).toFixed(0)}%`
               } else {
                 labelText = `${obj.class_name.toUpperCase()} #${obj.id} · ${(obj.confidence * 100).toFixed(0)}%`
               }

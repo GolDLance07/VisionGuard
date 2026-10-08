@@ -69,10 +69,13 @@ function App() {
 
     const getCategory = (cls) => {
       const l = (cls || '').toLowerCase();
-      if (['knife', 'scissors', 'blade', 'dagger', 'sword', 'box cutter', 'machete'].includes(l)) {
-        return 'Sharp Object';
+      if (['knife', 'scissors', 'blade', 'dagger', 'sword', 'box cutter', 'machete', 'cutter', 'scalpel'].includes(l)) {
+        return 'Sharp Objects';
       }
-      if (['gun', 'pistol', 'rifle', 'handgun', 'shotgun', 'weapon'].includes(l)) {
+      if (['baseball bat', 'bat', 'crowbar', 'pipe', 'club', 'stick', 'hammer'].includes(l)) {
+        return 'Blunt Objects';
+      }
+      if (['gun', 'pistol', 'rifle', 'handgun', 'shotgun', 'weapon', 'firearm'].includes(l)) {
         return 'Firearm';
       }
       return 'Hazardous Object';

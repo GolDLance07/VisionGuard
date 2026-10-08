@@ -8,7 +8,7 @@ from pydantic import BaseModel
 class RiskConfig(BaseModel):
     # Detection
     detection_confidence_threshold: float = 0.25
-    unsafe_classes: list[str] = ["knife", "gun", "weapon", "scissors", "baseball bat"]
+    unsafe_classes: list[str] = ["knife", "gun", "weapon", "scissors", "baseball bat", "bat", "blade", "crowbar"]
     model_path: str = "models/yolov8n.pt"
     frame_skip: int = 1
     processing_resolution: tuple[int, int] = (640, 480)

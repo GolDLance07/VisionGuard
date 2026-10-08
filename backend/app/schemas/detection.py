@@ -22,22 +22,39 @@ class BoundingBox(BaseModel):
 
 
 HAZARD_CATEGORIES: dict[str, str] = {
-    "knife": "Sharp Object",
-    "scissors": "Sharp Object",
-    "blade": "Sharp Object",
-    "dagger": "Sharp Object",
-    "sword": "Sharp Object",
-    "box cutter": "Sharp Object",
-    "machete": "Sharp Object",
+    # Sharp Objects
+    "knife": "Sharp Objects",
+    "scissors": "Sharp Objects",
+    "blade": "Sharp Objects",
+    "dagger": "Sharp Objects",
+    "sword": "Sharp Objects",
+    "box cutter": "Sharp Objects",
+    "machete": "Sharp Objects",
+    "cutter": "Sharp Objects",
+    "scalpel": "Sharp Objects",
+    "sharp object": "Sharp Objects",
+    "sharp objects": "Sharp Objects",
+
+    # Blunt Objects
+    "baseball bat": "Blunt Objects",
+    "bat": "Blunt Objects",
+    "crowbar": "Blunt Objects",
+    "club": "Blunt Objects",
+    "stick": "Blunt Objects",
+    "hammer": "Blunt Objects",
+    "pipe": "Blunt Objects",
+    "blunt object": "Blunt Objects",
+    "blunt objects": "Blunt Objects",
+    "blunt weapon": "Blunt Objects",
+
+    # Firearms
     "gun": "Firearm",
     "pistol": "Firearm",
     "rifle": "Firearm",
     "handgun": "Firearm",
     "shotgun": "Firearm",
     "weapon": "Firearm",
-    "baseball bat": "Blunt Weapon",
-    "bat": "Blunt Weapon",
-    "crowbar": "Blunt Weapon",
+
     "person": "Person",
 }
 

@@ -1,7 +1,6 @@
-"""
-Ultralytics tracker wrapper for persistent object IDs.
-"""
+import os
 import numpy as np
+from collections import Counter, defaultdict
 from ultralytics import YOLO
 
 from app.risk.config import get_config
@@ -11,13 +10,31 @@ from app.schemas.detection import DetectedObject, BoundingBox, get_hazard_catego
 class Tracker:
     def __init__(self):
         self.config = get_config()
-        self.model = YOLO(self.config.model_path)
+        # Prefer higher-accuracy yolov8s.pt (11.2M params) if available over yolov8n (3.2M params)
+        model_path = self.config.model_path
+        if model_path in ("models/yolov8n.pt", "yolov8n.pt") and os.path.exists("models/yolov8s.pt"):
+            model_path = "models/yolov8s.pt"
+        self.model = YOLO(model_path)
         self.track_expiry = self.config.track_expiry_frames
         self._track_history: dict[int, int] = {}  # track_id -> frames_since_seen
+        # Classification history per track ID: track_id -> list of (class_name, confidence)
+        self._track_class_votes: dict[int, list[tuple[str, float]]] = defaultdict(list)
 
     def track(self, frame: np.ndarray) -> list[DetectedObject]:
-        """Run tracking on a single frame, return objects with persistent IDs."""
-        results = self.model.track(frame, persist=True, conf=0.15, verbose=False)[0]
+        """Run tracking on a single frame with ByteTrack and temporal classification smoothing."""
+        try:
+            results = self.model.track(
+                frame,
+                persist=True,
+                tracker="bytetrack.yaml",
+                conf=0.15,
+                imgsz=640,
+                verbose=False,
+            )[0]
+        except Exception:
+            # Fallback if tracker config not found in environment
+            results = self.model.track(frame, persist=True, conf=0.15, verbose=False)[0]
+
         objects = []
 
         if results.boxes.id is None:
@@ -31,28 +48,54 @@ class Tracker:
         expired = [tid for tid, age in self._track_history.items() if age > self.track_expiry]
         for tid in expired:
             del self._track_history[tid]
+            if tid in self._track_class_votes:
+                del self._track_class_votes[tid]
 
         for box, track_id in zip(results.boxes, track_ids):
             cls_id = int(box.cls[0])
-            class_name = self.model.names[cls_id]
+            raw_class_name = self.model.names[cls_id]
             confidence = float(box.conf[0])
 
             # Sensitive threshold for weapons (0.15) so handheld items are tracked reliably
-            min_conf = 0.15 if class_name in self.config.unsafe_classes else self.config.detection_confidence_threshold
+            min_conf = 0.15 if raw_class_name in self.config.unsafe_classes else self.config.detection_confidence_threshold
             if confidence < min_conf:
                 continue
 
             # Only track unsafe classes + person
-            if class_name not in self.config.unsafe_classes and class_name != "person":
+            if raw_class_name not in self.config.unsafe_classes and raw_class_name != "person":
                 continue
 
             x1, y1, x2, y2 = map(float, box.xyxy[0])
+            w = max(1.0, x2 - x1)
+            h = max(1.0, y2 - y1)
+            aspect_ratio = max(w, h) / min(w, h)
+
+            # Record detection in temporal history for track_id
+            self._track_class_votes[int(track_id)].append((raw_class_name, confidence))
+            if len(self._track_class_votes[int(track_id)]) > 7:
+                self._track_class_votes[int(track_id)].pop(0)
+
+            # Temporal smoothed class: weighted vote across recent predictions
+            votes = self._track_class_votes[int(track_id)]
+            weight_by_class: dict[str, float] = defaultdict(float)
+            for c_name, conf in votes:
+                weight_by_class[c_name] += conf
+
+            smoothed_class = max(weight_by_class.items(), key=lambda x: x[1])[0]
+
+            # Aspect ratio sanity check: baseball bats are slender & elongated (aspect ratio >= 1.5)
+            if smoothed_class == "baseball bat" and aspect_ratio < 1.3 and confidence < 0.35:
+                # If borderline detection without bat elongation, rely on raw prediction or skip
+                smoothed_class = raw_class_name
+
+            category = get_hazard_category(smoothed_class)
+
             objects.append(DetectedObject(
                 id=int(track_id),
-                class_name=class_name,
+                class_name=smoothed_class,
                 confidence=confidence,
                 bbox=BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2),
-                category=get_hazard_category(class_name),
+                category=category,
             ))
 
             # Reset age for seen tracks
