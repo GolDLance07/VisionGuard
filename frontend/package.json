@@ -9,7 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "jszip": "^3.10.2",
     "react": "^18.3.0",
+    "react-datepicker": "^9.1.0",
     "react-dom": "^18.3.0"
   },
   "devDependencies": {
