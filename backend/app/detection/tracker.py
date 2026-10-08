@@ -17,7 +17,7 @@ class Tracker:
 
     def track(self, frame: np.ndarray) -> list[DetectedObject]:
         """Run tracking on a single frame, return objects with persistent IDs."""
-        results = self.model.track(frame, persist=True, verbose=False)[0]
+        results = self.model.track(frame, persist=True, conf=0.15, verbose=False)[0]
         objects = []
 
         if results.boxes.id is None:
@@ -37,7 +37,9 @@ class Tracker:
             class_name = self.model.names[cls_id]
             confidence = float(box.conf[0])
 
-            if confidence < self.config.detection_confidence_threshold:
+            # Sensitive threshold for weapons (0.15) so handheld items are tracked reliably
+            min_conf = 0.15 if class_name in self.config.unsafe_classes else self.config.detection_confidence_threshold
+            if confidence < min_conf:
                 continue
 
             # Only track unsafe classes + person
@@ -55,6 +57,25 @@ class Tracker:
 
             # Reset age for seen tracks
             self._track_history[int(track_id)] = 0
+
+        # Mark holding associations between people and unsafe objects
+        people = [o for o in objects if o.class_name == "person"]
+        weapons = [o for o in objects if o.class_name in self.config.unsafe_classes]
+        for p in people:
+            for w in weapons:
+                x_left = max(p.bbox.x1, w.bbox.x1)
+                y_top = max(p.bbox.y1, w.bbox.y1)
+                x_right = min(p.bbox.x2, w.bbox.x2)
+                y_bottom = min(p.bbox.y2, w.bbox.y2)
+                overlap_w = max(0.0, x_right - x_left)
+                overlap_h = max(0.0, y_bottom - y_top)
+                w_area = max(1.0, (w.bbox.x2 - w.bbox.x1) * (w.bbox.y2 - w.bbox.y1))
+                dx = max(0.0, max(p.bbox.x1 - w.bbox.x2, w.bbox.x1 - p.bbox.x2))
+                dy = max(0.0, max(p.bbox.y1 - w.bbox.y2, w.bbox.y1 - p.bbox.y2))
+                if (overlap_w * overlap_h) / w_area >= 0.25 or (dx * dx + dy * dy) < 30.0 * 30.0:
+                    p.is_holding_weapon = True
+                    w.is_held = True
+                    w.held_by_id = p.id
 
         # Increment age for unseen tracks
         for tid in self._track_history:

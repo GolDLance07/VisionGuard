@@ -289,6 +289,47 @@ export function VideoPanel({
         ['knife', 'scissors', 'gun', 'weapon', 'baseball bat'].includes(o.class_name)
     ) || []
 
+  // Precompute holding relationships between people and unsafe/sharp objects
+  const holdingPairs = []
+  const heldObjectIds = new Set()
+  const holdingPersonIds = new Set()
+
+  people.forEach((p) => {
+    unsafeObjects.forEach((w) => {
+      const x_left = Math.max(p.bbox.x1, w.bbox.x1)
+      const y_top = Math.max(p.bbox.y1, w.bbox.y1)
+      const x_right = Math.min(p.bbox.x2, w.bbox.x2)
+      const y_bottom = Math.min(p.bbox.y2, w.bbox.y2)
+      const overlapArea = Math.max(0, x_right - x_left) * Math.max(0, y_bottom - y_top)
+      const wArea = Math.max(1, (w.bbox.x2 - w.bbox.x1) * (w.bbox.y2 - w.bbox.y1))
+      const overlapRatio = overlapArea / wArea
+
+      const dx = Math.max(0, Math.max(p.bbox.x1 - w.bbox.x2, w.bbox.x1 - p.bbox.x2))
+      const dy = Math.max(0, Math.max(p.bbox.y1 - w.bbox.y2, w.bbox.y1 - p.bbox.y2))
+      const edgeDist = Math.hypot(dx, dy)
+
+      const pHeight = Math.max(1, p.bbox.y2 - p.bbox.y1)
+      const p_cx = (p.bbox.x1 + p.bbox.x2) / 2
+      const p_cy = (p.bbox.y1 + p.bbox.y2) / 2
+      const w_cx = (w.bbox.x1 + w.bbox.x2) / 2
+      const w_cy = (w.bbox.y1 + w.bbox.y2) / 2
+      const centerDist = Math.hypot(p_cx - w_cx, p_cy - w_cy)
+
+      const isHolding =
+        Boolean(p.is_holding_weapon) ||
+        Boolean(w.is_held) ||
+        overlapRatio >= 0.25 ||
+        edgeDist < 30 ||
+        centerDist < pHeight * 0.45
+
+      if (isHolding) {
+        holdingPairs.push({ person: p, weapon: w, distance: edgeDist })
+        heldObjectIds.add(w.id)
+        holdingPersonIds.add(p.id)
+      }
+    })
+  })
+
   const peakVelocity = frame?.objects?.length
     ? Math.max(...frame.objects.map((o) => o.speed || 0))
     : 0
@@ -462,102 +503,242 @@ export function VideoPanel({
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="#fb923c" />
               </marker>
             </defs>
-            {/* Proximity Vectors */}
-            {people.map((person) => {
-              const px = (person.bbox.x1 + person.bbox.x2) / 2
-              const py = (person.bbox.y1 + person.bbox.y2) / 2
-              return unsafeObjects.map((obj) => {
-                const ox = (obj.bbox.x1 + obj.bbox.x2) / 2
-                const oy = (obj.bbox.y1 + obj.bbox.y2) / 2
-                const dist = Math.hypot(px - ox, py - oy)
-                return (
-                  <g key={`proximity-${person.id}-${obj.id}`}>
-                    <line
-                      x1={px}
-                      y1={py}
-                      x2={ox}
-                      y2={oy}
-                      stroke="#f87171"
-                      strokeWidth="2"
-                      strokeDasharray="4 3"
-                      className="animate-pulse"
-                    />
-                    <circle cx={px} cy={py} r="3" fill="#38bdf8" />
-                    <circle cx={ox} cy={oy} r="3" fill="#fb923c" />
-                    <rect
-                      x={(px + ox) / 2 - 28}
-                      y={(py + oy) / 2 - 9}
-                      width="56"
-                      height="16"
-                      rx="4"
-                      fill="rgba(5, 15, 24, 0.92)"
-                      stroke="#f87171"
-                      strokeWidth="1"
-                    />
-                    <text
-                      x={(px + ox) / 2}
-                      y={(py + oy) / 2 + 3}
-                      fill="#f87171"
-                      fontSize="9"
-                      fontWeight="bold"
-                      fontFamily="JetBrains Mono, monospace"
-                      textAnchor="middle"
-                    >
-                      {Math.round(dist)} px
-                    </text>
-                  </g>
-                )
-              })
+            {/* Holding Relationship Tethers (Person <-> Held Sharp Object) */}
+            {holdingPairs.map((pair, idx) => {
+              const p_cx = (pair.person.bbox.x1 + pair.person.bbox.x2) / 2
+              const p_top_y = Math.max(pair.person.bbox.y1, 14)
+              const w_cx = (pair.weapon.bbox.x1 + pair.weapon.bbox.x2) / 2
+              const w_top_y = Math.max(pair.weapon.bbox.y1, 14)
+              const midX = (p_cx + w_cx) / 2
+              const midY = (p_top_y + w_top_y) / 2
+
+              const score = frame?.risk_score ?? 0
+              const linkColor =
+                score >= 0.70 || effectiveRiskLevel === 'HIGH' ? '#ef4444' : '#fde047'
+
+              return (
+                <g key={`holding-tether-${pair.person.id}-${pair.weapon.id}-${idx}`}>
+                  <line
+                    x1={p_cx}
+                    y1={p_top_y}
+                    x2={w_cx}
+                    y2={w_top_y}
+                    stroke={linkColor}
+                    strokeWidth="2.5"
+                    strokeDasharray="4 3"
+                    className="animate-pulse"
+                  />
+                  <rect
+                    x={midX - 42}
+                    y={midY - 9}
+                    width="84"
+                    height="18"
+                    rx="4"
+                    fill="rgba(5, 15, 24, 0.94)"
+                    stroke={linkColor}
+                    strokeWidth="1.2"
+                  />
+                  <text
+                    x={midX}
+                    y={midY + 3.5}
+                    fill={linkColor}
+                    fontSize="8.5"
+                    fontWeight="bold"
+                    fontFamily="JetBrains Mono, monospace"
+                    textAnchor="middle"
+                  >
+                    ⚠ HELD OBJECT
+                  </text>
+                </g>
+              )
             })}
-            {/* Bounding Boxes */}
+
+            {/* Standalone Proximity Lines (for non-held separate people & unsafe objects) */}
+            {people.map((person) => {
+              const p_cx = (person.bbox.x1 + person.bbox.x2) / 2
+              const p_top_y = Math.max(person.bbox.y1, 14)
+              return unsafeObjects
+                .filter((w) => !heldObjectIds.has(w.id))
+                .map((obj) => {
+                  const o_cx = (obj.bbox.x1 + obj.bbox.x2) / 2
+                  const o_top_y = Math.max(obj.bbox.y1, 14)
+                  const dist = Math.hypot(p_cx - o_cx, p_top_y - o_top_y)
+                  if (dist > 320) return null
+                  const midX = (p_cx + o_cx) / 2
+                  const midY = (p_top_y + o_top_y) / 2
+                  return (
+                    <g key={`proximity-${person.id}-${obj.id}`}>
+                      <line
+                        x1={p_cx}
+                        y1={p_top_y}
+                        x2={o_cx}
+                        y2={o_top_y}
+                        stroke="#fb923c"
+                        strokeWidth="1.5"
+                        strokeDasharray="3 3"
+                        strokeOpacity="0.75"
+                      />
+                      <rect
+                        x={midX - 24}
+                        y={midY - 8}
+                        width="48"
+                        height="15"
+                        rx="3"
+                        fill="rgba(5, 15, 24, 0.9)"
+                        stroke="#fb923c"
+                        strokeWidth="1"
+                      />
+                      <text
+                        x={midX}
+                        y={midY + 2.5}
+                        fill="#fb923c"
+                        fontSize="8.5"
+                        fontWeight="bold"
+                        fontFamily="JetBrains Mono, monospace"
+                        textAnchor="middle"
+                      >
+                        {Math.round(dist)} px
+                      </text>
+                    </g>
+                  )
+                })
+            })}
+
+            {/* Concentric Circle Trackers on Top of Person or Object */}
             {frame?.objects?.map((obj) => {
               const isPerson = obj.class_name.toLowerCase() === 'person'
               const isUnsafe =
                 unsafeClasses.includes(obj.class_name) ||
                 ['knife', 'scissors', 'gun', 'weapon', 'baseball bat'].includes(obj.class_name)
-              const color = isPerson ? '#38bdf8' : isUnsafe ? '#fb923c' : '#57f1db'
+
+              const isHoldingWeapon = isPerson && holdingPersonIds.has(obj.id)
+              const isHeldWeapon = isUnsafe && heldObjectIds.has(obj.id)
+
+              const score = frame?.risk_score ?? 0
+
+              // Dynamic color according to risk score & holding state
+              let color = '#38bdf8' // Default calm blue for normal person
+              if (isHoldingWeapon || isHeldWeapon) {
+                if (score >= 0.70 || effectiveRiskLevel === 'HIGH') {
+                  color = '#ef4444' // Crimson High Risk
+                } else {
+                  color = '#fde047' // Light Yellow for person holding sharp object / held object
+                }
+              } else if (isUnsafe) {
+                if (score >= 0.70 || effectiveRiskLevel === 'HIGH') {
+                  color = '#ef4444'
+                } else if (score >= 0.30 || effectiveRiskLevel === 'MEDIUM') {
+                  color = '#fde047' // Light Yellow
+                } else {
+                  color = '#fb923c' // Amber for separate weapon
+                }
+              } else if (isPerson) {
+                if (score >= 0.70 || effectiveRiskLevel === 'HIGH') {
+                  color = '#f87171' // Elevated
+                } else if (score >= 0.30 || effectiveRiskLevel === 'MEDIUM') {
+                  color = '#fde047' // Light Yellow
+                } else {
+                  color = '#38bdf8' // Calm Blue
+                }
+              }
+
               const { x1, y1, x2, y2 } = obj.bbox
-              const w = Math.max(x2 - x1, 10)
-              const h = Math.max(y2 - y1, 10)
               const cx = (x1 + x2) / 2
-              const cy = (y1 + y2) / 2
+              const top_y = Math.max(y1, 14)
+
+              // Velocity vector
               const hasMotion = obj.speed && obj.speed > 5
               const rad = (obj.direction || 0) * (Math.PI / 180)
-              const vecLen = Math.min(Math.max(obj.speed * 0.4, 15), 45)
+              const vecLen = Math.min(Math.max(obj.speed * 0.4, 14), 40)
               const vx = cx + Math.cos(rad) * vecLen
-              const vy = cy + Math.sin(rad) * vecLen
-              const label = `${obj.class_name.toUpperCase()} #${obj.id} · ${(
-                obj.confidence * 100
-              ).toFixed(0)}%`
+              const vy = top_y + Math.sin(rad) * vecLen
+
+              // Badge Label
+              let labelText = ''
+              if (isHoldingWeapon) {
+                labelText = `PERSON #${obj.id} · HOLDING SHARP OBJ`
+              } else if (isHeldWeapon) {
+                labelText = `${obj.class_name.toUpperCase()} #${obj.id} · HELD`
+              } else {
+                labelText = `${obj.class_name.toUpperCase()} #${obj.id} · ${(obj.confidence * 100).toFixed(0)}%`
+              }
+
+              const badgeWidth = Math.min(labelText.length * 6.4 + 16, 210)
+              const badgeX = Math.max(cx - badgeWidth / 2, 4)
+              const badgeY = Math.max(top_y - 24, 4)
+
               return (
-                <g key={`bbox-${obj.id}`}>
-                  <rect
-                    x={x1}
-                    y={y1}
-                    width={w}
-                    height={h}
+                <g key={`tracker-circle-${obj.id}`}>
+                  {/* Subtle vertical anchor guideline to object */}
+                  <line
+                    x1={cx}
+                    y1={top_y + 12}
+                    x2={cx}
+                    y2={Math.min(y2, top_y + (isPerson ? 40 : 18))}
+                    stroke={color}
+                    strokeWidth="1"
+                    strokeDasharray="2 2"
+                    strokeOpacity="0.35"
+                  />
+
+                  {/* Concentric Circle 1: Outer Radar Ripple */}
+                  <circle
+                    cx={cx}
+                    cy={top_y}
+                    r="15"
                     fill="none"
                     stroke={color}
-                    strokeWidth="2"
-                    rx="2"
-                    className={isUnsafe ? 'animate-pulse' : ''}
+                    strokeWidth="1"
+                    strokeOpacity="0.35"
+                    className="animate-ping"
+                    style={{
+                      transformOrigin: `${cx}px ${top_y}px`,
+                      animationDuration: isHoldingWeapon || isHeldWeapon ? '1.4s' : '2.8s',
+                    }}
                   />
-                  <path
-                    d={`M ${x1} ${y1 + 6} L ${x1} ${y1} L ${x1 + 6} ${y1}`}
-                    stroke={color}
-                    strokeWidth="3"
+
+                  {/* Concentric Circle 2: Outer Ring */}
+                  <circle
+                    cx={cx}
+                    cy={top_y}
+                    r="11"
                     fill="none"
-                  />
-                  <path
-                    d={`M ${x2 - 6} ${y1} L ${x2} ${y1} L ${x2} ${y1 + 6}`}
                     stroke={color}
-                    strokeWidth="3"
-                    fill="none"
+                    strokeWidth="1.6"
+                    strokeDasharray={isUnsafe ? '3 2' : 'none'}
+                    className={isHoldingWeapon || isHeldWeapon ? 'animate-pulse' : ''}
                   />
+
+                  {/* Concentric Circle 3: Middle Ring */}
+                  <circle
+                    cx={cx}
+                    cy={top_y}
+                    r="6"
+                    fill={color}
+                    fillOpacity="0.22"
+                    stroke={color}
+                    strokeWidth="1.8"
+                  />
+
+                  {/* Concentric Circle 4: Inner Solid Target Dot */}
+                  <circle
+                    cx={cx}
+                    cy={top_y}
+                    r="2.5"
+                    fill={color}
+                  />
+
+                  {/* Crosshair Reticle Ticks */}
+                  <line x1={cx - 15} y1={top_y} x2={cx - 11} y2={top_y} stroke={color} strokeWidth="1.5" />
+                  <line x1={cx + 11} y1={top_y} x2={cx + 15} y2={top_y} stroke={color} strokeWidth="1.5" />
+                  <line x1={cx} y1={top_y - 15} x2={cx} y2={top_y - 11} stroke={color} strokeWidth="1.5" />
+                  <line x1={cx} y1={top_y + 11} x2={cx} y2={top_y + 15} stroke={color} strokeWidth="1.5" />
+
+                  {/* Motion Velocity Vector */}
                   {hasMotion && (
                     <line
                       x1={cx}
-                      y1={cy}
+                      y1={top_y}
                       x2={vx}
                       y2={vy}
                       stroke={color}
@@ -565,25 +746,29 @@ export function VideoPanel({
                       markerEnd={isPerson ? 'url(#arrow-person)' : 'url(#arrow-object)'}
                     />
                   )}
+
+                  {/* Top Target Badge Tag */}
                   <rect
-                    x={x1}
-                    y={Math.max(y1 - 18, 0)}
-                    width={Math.min(label.length * 6.5 + 12, 160)}
+                    x={badgeX}
+                    y={badgeY}
+                    width={badgeWidth}
                     height="16"
-                    fill="rgba(5, 15, 24, 0.95)"
+                    rx="3"
+                    fill="rgba(5, 15, 24, 0.94)"
                     stroke={color}
                     strokeWidth="1"
-                    rx="3"
+                    className="shadow-sm"
                   />
                   <text
-                    x={x1 + 4}
-                    y={Math.max(y1 - 6, 12)}
+                    x={badgeX + badgeWidth / 2}
+                    y={badgeY + 11}
                     fill={color}
-                    fontSize="9"
+                    fontSize="8.5"
                     fontWeight="bold"
                     fontFamily="JetBrains Mono, monospace"
+                    textAnchor="middle"
                   >
-                    {label}
+                    {labelText}
                   </text>
                 </g>
               )

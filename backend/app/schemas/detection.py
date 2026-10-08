@@ -57,6 +57,9 @@ class DetectedObject(BaseModel):
     # Optional movement data (added in M2)
     speed: float = 0.0
     direction: float = 0.0
+    is_holding_weapon: bool = False
+    is_held: bool = False
+    held_by_id: int | None = None
 
 
 class RiskReason(BaseModel):
