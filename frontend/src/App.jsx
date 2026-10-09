@@ -35,8 +35,10 @@ function App() {
   const [apiError, setApiError] = useState(null)
   const [incidents, setIncidents] = useState([])
   const [previewState, setPreviewState] = useState(null) // null | 'low' | 'medium' | 'high' | 'low-conf'
+  const [snapshotToast, setSnapshotToast] = useState(null)
 
   const lastIncidentTimeRef = useRef(0)
+  const lastHighRiskSnapshotRef = useRef(0)
 
   // WebSocket hook for live stream telemetry
   const {
@@ -56,11 +58,14 @@ function App() {
   }, [darkMode])
 
   // Record HIGH-risk incident snapshots
-  // 1. Group Detections into Single Incident
   useEffect(() => {
     if (!latestFrame || latestFrame.risk_level !== 'HIGH') return;
 
     const now = Date.now();
+    // Throttle automatic high-risk snapshots to once every 3.5 seconds per high-risk episode
+    if (now - lastHighRiskSnapshotRef.current < 3500) return;
+    lastHighRiskSnapshotRef.current = now;
+
     const timeStr = new Date().toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit',
@@ -85,73 +90,86 @@ function App() {
       return 'Hazardous Object';
     };
 
-    unsafe.forEach((obj) => {
-      const key = obj.class_name.toLowerCase();
-      const existing = openIncidentsRef.current.get(key);
+    let title = 'Critical Safety Hazard Detected';
+    let hazardClass = 'Kinematic Vector Hazard';
+    let detectedClasses = (latestFrame.objects || []).map(
+      (o) => `${o.class_name} (${(o.confidence * 100).toFixed(0)}%)`
+    );
 
-      if (existing) {
-        existing.lastSeenAt = now;
-        existing.durationMs = now - existing.startedAt;
-        existing.detectionCount += 1;
-        if (obj.confidence > existing.peakConfidence) {
-          existing.peakConfidence = obj.confidence;
-        }
-
-        setIncidents((prev) =>
-          prev.map((inc) => (inc.id === existing.id ? { ...existing } : inc))
-        );
+    if (unsafe.length > 0) {
+      const categories = [...new Set(unsafe.map((o) => getCategory(o.class_name)))];
+      title = `${categories.join(' & ')} Threat Escalation`;
+      hazardClass = unsafe[0].class_name;
+    } else {
+      const topReason = latestFrame.reasons?.find((r) => r.rule !== 'persistence')?.details;
+      if (topReason?.toLowerCase().includes('speed') || topReason?.toLowerCase().includes('velocity')) {
+        title = 'Rapid Kinematic Approach Alert';
+      } else if (topReason?.toLowerCase().includes('proximity')) {
+        title = 'Critical Proximity Boundary Breach';
       } else {
-        const categories = [getCategory(obj.class_name)];
-        const title = `${categories.join(' & ')} Detected`;
-        const primaryReason =
-          latestFrame.reasons?.find((r) => r.rule !== 'persistence')?.details ||
-          'Unsafe physical vector conditions observed';
-
-        const newIncident = {
-          id: `inc-${nextIncidentIdRef.current++}`,
-          hazardClass: obj.class_name,
-          state: 'open',
-          startedAt: now,
-          lastSeenAt: now,
-          durationMs: 0,
-          detectionCount: 1,
-          peakConfidence: obj.confidence || 0.9,
-          status: 'unreviewed',
-          timestamp: now,
-          timeStr,
-          riskScore: latestFrame.risk_score,
-          riskLevel: latestFrame.risk_level,
-          title,
-          primaryReason,
-          reasons: latestFrame.reasons || [],
-          frame: latestFrame.frame,
-          detectedClasses: [`${obj.class_name} (${(obj.confidence * 100).toFixed(0)}%)`],
-        };
-
-        openIncidentsRef.current.set(key, newIncident);
-        setIncidents((prev) => [newIncident, ...prev]);
-
-        // Sync to Neon PostgreSQL and upload critical snapshot to Cloudinary
-        fetch(`${API_BASE}/api/incidents`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newIncident),
-        })
-          .then((res) => res.json())
-          .then((resData) => {
-            if (resData?.incident?.imageUrl) {
-              setIncidents((prev) =>
-                prev.map((it) =>
-                  it.id === newIncident.id
-                    ? { ...it, imageUrl: resData.incident.imageUrl, frame: resData.incident.imageUrl }
-                    : it
-                )
-              );
-            }
-          })
-          .catch((err) => console.debug('Could not sync incident to backend:', err));
+        title = 'Multi-Vector High Safety Risk';
       }
+    }
+
+    const primaryReason =
+      latestFrame.reasons?.find((r) => r.rule !== 'persistence')?.details ||
+      latestFrame.reasons?.[0]?.details ||
+      'Unsafe physical vector conditions observed';
+
+    const incidentId = `inc-hr-${Date.now().toString().slice(-6)}-${nextIncidentIdRef.current++}`;
+
+    const newIncident = {
+      id: incidentId,
+      hazardClass,
+      state: 'open',
+      startedAt: now,
+      lastSeenAt: now,
+      durationMs: 1200,
+      detectionCount: 1,
+      peakConfidence: unsafe[0]?.confidence || 0.92,
+      status: 'unreviewed',
+      timestamp: now,
+      timeStr,
+      riskScore: latestFrame.risk_score,
+      riskLevel: latestFrame.risk_level,
+      title,
+      primaryReason,
+      reasons: latestFrame.reasons || [],
+      frame: latestFrame.frame || null,
+      detectedClasses,
+    };
+
+    setIncidents((prev) => [newIncident, ...prev].slice(0, 100));
+
+    // Show on-screen toast
+    setSnapshotToast({
+      id: incidentId,
+      title: '📸 High-Risk Snapshot Recorded',
+      detail: `${title} · ${timeStr}`,
     });
+    setTimeout(() => {
+      setSnapshotToast((curr) => (curr?.id === incidentId ? null : curr));
+    }, 4000);
+
+    // Sync to Neon PostgreSQL and upload critical snapshot to Cloudinary / local static files
+    fetch(`${API_BASE}/api/incidents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newIncident),
+    })
+      .then((res) => res.json())
+      .then((resData) => {
+        if (resData?.incident?.imageUrl) {
+          setIncidents((prev) =>
+            prev.map((it) =>
+              it.id === newIncident.id
+                ? { ...it, imageUrl: resData.incident.imageUrl, frame: resData.incident.imageUrl }
+                : it
+            )
+          );
+        }
+      })
+      .catch((err) => console.debug('Could not sync incident to backend:', err));
   }, [latestFrame, config]);
 
   // Load persisted incidents from Neon Database on startup
@@ -189,7 +207,7 @@ function App() {
   }, []);
 
   // Manual snapshot capture from operator
-  const handleCaptureSnapshot = useCallback(() => {
+  const handleCaptureSnapshot = useCallback((capturedFrame) => {
     const now = Date.now()
     const timeStr = new Date().toLocaleTimeString([], {
       hour: '2-digit',
@@ -202,8 +220,11 @@ function App() {
         (config?.unsafe_classes || ['knife', 'scissors', 'gun']).includes(o.class_name)
       ) || []
 
+    const frameData = capturedFrame || latestFrame?.frame || null
+    const incidentId = `inc-manual-${now.toString().slice(-6)}`
+
     const newIncident = {
-      id: `inc-manual-${now}`,
+      id: incidentId,
       timestamp: now,
       timeStr,
       riskScore: latestFrame?.risk_score ?? 0.84,
@@ -213,13 +234,23 @@ function App() {
       reasons: latestFrame?.reasons?.length
         ? latestFrame.reasons
         : [{ details: 'Manual keyframe captured for forensic retention', rule: 'manual_capture' }],
-      frame: latestFrame?.frame || null,
+      frame: frameData,
       detectedClasses: unsafe.map((o) => `${o.class_name} (${(o.confidence * 100).toFixed(0)}%)`),
     }
 
-    setIncidents((prev) => [newIncident, ...prev].slice(0, 30))
+    setIncidents((prev) => [newIncident, ...prev].slice(0, 100))
 
-    // Upload snapshot to Cloudinary and record in database
+    // Non-blocking toast notification
+    setSnapshotToast({
+      id: incidentId,
+      title: '📸 Snapshot Captured',
+      detail: `Evidence keyframe saved at ${timeStr}`,
+    })
+    setTimeout(() => {
+      setSnapshotToast((curr) => (curr?.id === incidentId ? null : curr))
+    }, 4000)
+
+    // Upload snapshot to Cloudinary / local static files and record in database
     fetch(`${API_BASE}/api/incidents`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -238,8 +269,6 @@ function App() {
         }
       })
       .catch((err) => console.debug('Snapshot sync error:', err))
-
-    alert(`Snapshot recorded at ${timeStr} and queued for Cloudinary sync!`)
   }, [latestFrame, config])
 
   // Start Session API call
@@ -447,6 +476,25 @@ function App() {
                 soundEnabled={soundEnabled}
                 onToggleSound={() => setSoundEnabled((prev) => !prev)}
               />
+            </div>
+          )}
+          {/* Floating Snapshot Notification Toast */}
+          {snapshotToast && (
+            <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-container-high/95 border border-primary/40 shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom duration-200">
+              <span className="flex h-3 w-3 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+              </span>
+              <div>
+                <div className="font-bold text-xs text-text-primary">{snapshotToast.title}</div>
+                <div className="font-mono text-[11px] text-text-muted">{snapshotToast.detail}</div>
+              </div>
+              <button
+                onClick={() => setActiveTab('incidents')}
+                className="ml-2 px-2.5 py-1 rounded bg-primary text-on-primary hover:opacity-90 text-xs font-semibold shadow-sm transition-all"
+              >
+                View
+              </button>
             </div>
           )}
         </div>

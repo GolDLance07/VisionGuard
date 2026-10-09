@@ -1,4 +1,19 @@
 import React, { useState } from 'react'
+import { getApiBase } from '../config'
+
+export function getSnapshotUrl(incident) {
+  if (!incident) return null
+  const src = incident.imageUrl || incident.frame
+  if (!src || typeof src !== 'string') return null
+  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+    return src
+  }
+  if (src.startsWith('/')) {
+    const base = getApiBase()
+    return base ? `${base}${src}` : src
+  }
+  return `data:image/jpeg;base64,${src}`
+}
 
 export function IncidentHistory({ incidents = [], onClear }) {
   const [selectedId, setSelectedId] = useState(incidents[0]?.id || 'inc-default')
@@ -157,6 +172,7 @@ export function IncidentHistory({ incidents = [], onClear }) {
       })),
       detectedClasses: inc.detectedClasses || [],
       frame: inc.frame,
+      imageUrl: inc.imageUrl || inc.frame,
     })),
     ...seedIncidents,
   ]
@@ -237,15 +253,39 @@ export function IncidentHistory({ incidents = [], onClear }) {
     document.body.removeChild(link)
   }
 
-  const downloadActiveFrame = () => {
-    if (!activeIncident?.frame) {
-      alert('This simulated audit record does not have a raw base64 frame attached.')
+  const downloadActiveFrame = async () => {
+    const url = getSnapshotUrl(activeIncident)
+    if (!url) {
+      alert('This simulated audit record does not have a raw snapshot frame attached.')
       return
     }
-    const a = document.createElement('a')
-    a.href = `data:image/jpeg;base64,${activeIncident.frame}`
-    a.download = `incident-${activeIncident.eventId.replace('#', '')}-${activeIncident.timeStr}.jpg`
-    a.click()
+    const cleanId = (activeIncident.eventId || activeIncident.id || 'snapshot').toString().replace('#', '')
+    const timeClean = (activeIncident.timeStr || '').replace(/:/g, '-') || Date.now()
+    const filename = `incident-${cleanId}-${timeClean}.jpg`
+
+    if (url.startsWith('data:')) {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } else {
+      try {
+        const resp = await fetch(url)
+        const blob = await resp.blob()
+        const blobUrl = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = blobUrl
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(blobUrl)
+      } catch {
+        window.open(url, '_blank')
+      }
+    }
   }
 
   return (
@@ -498,6 +538,7 @@ export function IncidentHistory({ incidents = [], onClear }) {
               <thead>
                 <tr className="bg-surface-container-low text-text-muted font-mono text-[10px] uppercase tracking-wider border-b border-surface-border/40">
                   <th className="py-space-sm px-space-md">Event ID</th>
+                  <th className="py-space-sm px-space-xs text-center">Snapshot</th>
                   <th className="py-space-sm px-space-sm">Time</th>
                   <th className="py-space-sm px-space-sm">Source</th>
                   <th className="py-space-sm px-space-sm">Trigger Rule</th>
@@ -526,6 +567,15 @@ export function IncidentHistory({ incidents = [], onClear }) {
                           <span className="w-1.5 h-5 rounded-full bg-status-high mr-1"></span>
                         )}
                         {item.eventId}
+                      </td>
+                      <td className="py-space-sm px-space-xs text-center">
+                        {getSnapshotUrl(item) ? (
+                          <div className="w-10 h-7 rounded border border-surface-border/80 overflow-hidden bg-black/60 inline-flex items-center justify-center shadow-xs">
+                            <img src={getSnapshotUrl(item)} alt="Snapshot" className="w-full h-full object-cover" />
+                          </div>
+                        ) : (
+                          <span className="material-symbols-outlined text-text-muted text-[16px]">photo_camera</span>
+                        )}
                       </td>
                       <td className="py-space-sm px-space-sm font-mono text-[11px] text-text-muted">
                         {item.timeStr}
@@ -620,13 +670,9 @@ export function IncidentHistory({ incidents = [], onClear }) {
                 onClick={() => setIsModalOpen(true)}
                 className="relative w-full aspect-video rounded-lg overflow-hidden bg-surface-container-lowest border border-surface-border cursor-pointer group flex items-center justify-center shadow-inner"
               >
-                {activeIncident.imageUrl || activeIncident.frame ? (
+                {getSnapshotUrl(activeIncident) ? (
                   <img
-                    src={
-                      (activeIncident.imageUrl || activeIncident.frame).startsWith('http')
-                        ? (activeIncident.imageUrl || activeIncident.frame)
-                        : `data:image/jpeg;base64,${activeIncident.frame}`
-                    }
+                    src={getSnapshotUrl(activeIncident)}
                     alt="Captured Incident Evidence"
                     className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
                   />
@@ -868,13 +914,9 @@ export function IncidentHistory({ incidents = [], onClear }) {
             </div>
 
             <div className="rounded-xl overflow-hidden border border-surface-border bg-black aspect-video flex items-center justify-center shadow-inner">
-              {activeIncident.imageUrl || activeIncident.frame ? (
+              {getSnapshotUrl(activeIncident) ? (
                 <img
-                  src={
-                    (activeIncident.imageUrl || activeIncident.frame).startsWith('http')
-                      ? (activeIncident.imageUrl || activeIncident.frame)
-                      : `data:image/jpeg;base64,${activeIncident.frame}`
-                  }
+                  src={getSnapshotUrl(activeIncident)}
                   alt="Full incident frame"
                   className="w-full h-full object-contain"
                 />

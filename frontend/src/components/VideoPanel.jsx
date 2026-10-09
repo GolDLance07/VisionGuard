@@ -31,6 +31,9 @@ export function VideoPanel({
   const [isExporting, setIsExporting] = useState(false)
   const [webcamActive, setWebcamActive] = useState(false)
   const [webcamError, setWebcamError] = useState(null)
+  const [shutterFlash, setShutterFlash] = useState(false)
+  const [snapshotHudNotice, setSnapshotHudNotice] = useState(false)
+  const prevHighRiskRef = useRef(false)
 
   const fileInputRef = useRef(null)
   const videoContainerRef = useRef(null)
@@ -284,7 +287,17 @@ export function VideoPanel({
     }
   }, [frame, effectiveRiskLevel, soundEnabled])
 
-  // Category mapping
+  // Auto-indicate evidence snapshot on High-Risk moments
+  useEffect(() => {
+    if (isHighRisk && !prevHighRiskRef.current) {
+      setSnapshotHudNotice(true)
+      const timer = setTimeout(() => setSnapshotHudNotice(false), 3000)
+      prevHighRiskRef.current = true
+      return () => clearTimeout(timer)
+    } else if (!isHighRisk) {
+      prevHighRiskRef.current = false
+    }
+  }, [isHighRisk])
   // Category mapping for safety classification
   const getHazardCategory = (className, category) => {
     if (category && category !== 'Object') {
@@ -678,6 +691,19 @@ export function VideoPanel({
           <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 max-w-md bg-red-950/90 text-red-200 border border-red-800 text-xs px-4 py-2 rounded-lg shadow-xl backdrop-blur-md flex items-center gap-2">
             <span className="text-sm">⚠</span>
             <span>{webcamError}</span>
+          </div>
+        )}
+
+        {/* Camera shutter flash effect */}
+        {shutterFlash && (
+          <div className="absolute inset-0 bg-white/75 pointer-events-none z-50 animate-in fade-in duration-75" />
+        )}
+
+        {/* Snapshot HUD Notice */}
+        {snapshotHudNotice && (
+          <div className="absolute top-16 right-4 z-40 bg-surface-container-high/95 text-primary border border-primary/60 text-xs px-3 py-1.5 rounded-lg shadow-2xl backdrop-blur-md flex items-center gap-2 animate-in fade-in duration-200">
+            <span className="material-symbols-outlined text-[16px] text-primary">photo_camera</span>
+            <span className="font-mono font-bold text-[11px] text-text-primary">EVIDENCE SNAPSHOT SAVED</span>
           </div>
         )}
 
@@ -1428,18 +1454,40 @@ export function VideoPanel({
         </div>
         <div className="flex items-center gap-space-sm">
           <button
-            className="w-9 h-9 rounded-lg bg-surface-container-high hover:bg-surface-container-highest border border-surface-border/60 flex items-center justify-center text-text-primary transition-colors"
-            title="Capture Snapshot Evidence"
+            className="h-9 px-3 rounded-lg bg-surface-container-high hover:bg-surface-container-highest border border-surface-border/60 flex items-center justify-center text-text-primary transition-colors text-xs font-semibold gap-1.5"
+            title="Capture Instant Evidence Snapshot"
             onClick={() => {
+              let frameToCapture = null
+              if (localVideoRef.current && localVideoRef.current.readyState >= 2) {
+                try {
+                  const video = localVideoRef.current
+                  const canvas = document.createElement('canvas')
+                  canvas.width = video.videoWidth || 640
+                  canvas.height = video.videoHeight || 480
+                  const ctx = canvas.getContext('2d')
+                  ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+                  frameToCapture = canvas.toDataURL('image/jpeg', 0.85).split(',')[1]
+                } catch (e) {
+                  console.debug('Webcam canvas snapshot error:', e)
+                }
+              }
+              if (!frameToCapture && frame?.frame) {
+                frameToCapture = frame.frame.startsWith('data:') ? frame.frame.split(',')[1] : frame.frame
+              }
+
+              setShutterFlash(true)
+              setTimeout(() => setShutterFlash(false), 180)
+              setSnapshotHudNotice(true)
+              setTimeout(() => setSnapshotHudNotice(false), 2500)
+
               if (onCaptureSnapshot) {
-                onCaptureSnapshot()
-              } else {
-                alert('Snapshot captured to session logs!')
+                onCaptureSnapshot(frameToCapture)
               }
             }}
             type="button"
           >
-            <span className="material-symbols-outlined text-[18px]">photo_camera</span>
+            <span className="material-symbols-outlined text-[18px] text-primary">photo_camera</span>
+            <span>Snapshot</span>
           </button>
           {/* Export Incident Package Button */}
           <button

@@ -71,13 +71,23 @@ def upload_snapshot(frame_data: str, incident_id: str | None = None) -> str | No
     if not frame_data:
         return None
 
+    # If already a URL or local snapshot path, return as-is
+    str_data = str(frame_data).strip()
+    if str_data.startswith("http://") or str_data.startswith("https://") or str_data.startswith("/api/snapshots"):
+        return str_data
+
     # Ensure format is a data URI or raw base64
-    if not frame_data.startswith("data:image"):
-        data_uri = f"data:image/jpeg;base64,{frame_data}"
-        raw_b64 = frame_data
+    if not str_data.startswith("data:image"):
+        data_uri = f"data:image/jpeg;base64,{str_data}"
+        raw_b64 = str_data
     else:
-        data_uri = frame_data
-        raw_b64 = frame_data.split(",", 1)[-1]
+        data_uri = str_data
+        raw_b64 = str_data.split(",", 1)[-1]
+
+    # Ensure valid base64 padding
+    missing_padding = len(raw_b64) % 4
+    if missing_padding:
+        raw_b64 += "=" * (4 - missing_padding)
 
     # 1. Attempt Cloudinary Upload if configured
     if cloudinary_initialized:
