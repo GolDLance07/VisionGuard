@@ -13,6 +13,9 @@ import { SettingsModal } from './components/SettingsModal'
 import { SettingsView } from './components/SettingsView'
 import { useDetectionWebSocket } from './hooks/useDetectionWebSocket'
 
+// Fallback unsafe class list — matches backend risk/config.py defaults
+const DEFAULT_UNSAFE_CLASSES = ['knife', 'gun', 'weapon', 'scissors', 'baseball bat']
+
 function App() {
   const COOLDOWN_MS = 4000;
   const openIncidentsRef = useRef(new Map());
@@ -64,19 +67,10 @@ function App() {
     });
 
     const unsafe = (latestFrame.objects || []).filter((o) =>
-      (config?.unsafe_classes || ['knife', 'scissors', 'gun']).includes(o.class_name)
+      (config?.unsafe_classes || DEFAULT_UNSAFE_CLASSES).includes(o.class_name)
     );
 
-    const getCategory = (cls) => {
-      const l = (cls || '').toLowerCase();
-      if (['knife', 'scissors', 'blade', 'dagger', 'sword', 'box cutter', 'machete'].includes(l)) {
-        return 'Sharp Object';
-      }
-      if (['gun', 'pistol', 'rifle', 'handgun', 'shotgun', 'weapon'].includes(l)) {
-        return 'Firearm';
-      }
-      return 'Hazardous Object';
-    };
+    const getCategory = (obj) => obj.category || 'Hazardous Object';
 
     unsafe.forEach((obj) => {
       const key = obj.class_name.toLowerCase();
@@ -94,7 +88,7 @@ function App() {
           prev.map((inc) => (inc.id === existing.id ? { ...existing } : inc))
         );
       } else {
-        const categories = [getCategory(obj.class_name)];
+        const categories = [getCategory(obj)];
         const title = `${categories.join(' & ')} Detected`;
         const primaryReason =
           latestFrame.reasons?.find((r) => r.rule !== 'persistence')?.details ||
@@ -160,7 +154,7 @@ function App() {
 
     const unsafe =
       latestFrame?.objects?.filter((o) =>
-        (config?.unsafe_classes || ['knife', 'scissors', 'gun']).includes(o.class_name)
+        (config?.unsafe_classes || DEFAULT_UNSAFE_CLASSES).includes(o.class_name)
       ) || []
 
     const newIncident = {
@@ -415,7 +409,6 @@ function App() {
               <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
               CV Core v2.4.1
             </span>
-            <span>IEEE Hackathon 2026</span>
           </div>
         </div>
       </footer>

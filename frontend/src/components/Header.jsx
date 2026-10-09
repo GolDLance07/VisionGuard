@@ -25,11 +25,7 @@ export function Header({
             className="flex items-center gap-space-sm cursor-pointer select-none"
             onClick={() => setActiveTab('live')}
           >
-            <img
-              alt="Vision Guard Shield Logo"
-              className="h-8 w-auto object-contain"
-              src="https://lh3.googleusercontent.com/aida/AEtjO1V1I_8bOnZLqh-qWy2B2OnDWl4LOgQ5mMznfcr21XrkFTB41qgVFJ6SXe6hihe0l05I5sXYNSzCvYiRD89qKZxPW3JHL2cOZQ-SXFf749iFksEDR3TAsvi8S-xYnRj4kgSuVm_D9BAZLbCcnaCR3UOwywHOdUKecqBYUgnKg0lQko5Y1FuvcDQhEEGgr6jhmopYn-K1-krdJHBh6OzCcTsD2Tmd6Y6VQbJAhTpMUVD_HzQjlStRuwSsJSE"
-            />
+
             <div className="flex flex-col">
               <div className="flex items-center gap-space-xs">
                 <span className="font-semibold text-base text-text-primary tracking-tight">Vision Guard</span>
@@ -46,41 +42,37 @@ export function Header({
           <nav className="hidden lg:flex items-center gap-space-xs ml-space-md">
             <button
               onClick={() => setActiveTab('live')}
-              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs ${
-                activeTab === 'live'
-                  ? 'bg-surface-container-high text-primary shadow-sm'
-                  : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-              }`}
+              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs ${activeTab === 'live'
+                ? 'bg-surface-container-high text-primary shadow-sm'
+                : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                }`}
             >
               Live Monitor
             </button>
             <button
               onClick={() => setActiveTab('incidents')}
-              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs ${
-                activeTab === 'incidents'
-                  ? 'bg-surface-container-high text-primary shadow-sm'
-                  : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-              }`}
+              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs ${activeTab === 'incidents'
+                ? 'bg-surface-container-high text-primary shadow-sm'
+                : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                }`}
             >
               Incident Log
             </button>
             <button
               onClick={() => setActiveTab('telemetry')}
-              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs ${
-                activeTab === 'telemetry'
-                  ? 'bg-surface-container-high text-primary shadow-sm'
-                  : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-              }`}
+              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs ${activeTab === 'telemetry'
+                ? 'bg-surface-container-high text-primary shadow-sm'
+                : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                }`}
             >
               Safety Telemetry
             </button>
             <button
               onClick={() => setActiveTab('settings')}
-              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs ${
-                activeTab === 'settings'
-                  ? 'bg-surface-container-high text-primary shadow-sm'
-                  : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-              }`}
+              className={`px-space-sm py-1.5 rounded-lg transition-colors font-semibold text-xs ${activeTab === 'settings'
+                ? 'bg-surface-container-high text-primary shadow-sm'
+                : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                }`}
             >
               Settings
             </button>
@@ -92,13 +84,12 @@ export function Header({
           {/* Connection Status Pill */}
           <div className="hidden sm:flex items-center gap-space-xs px-space-sm py-1 rounded-full bg-surface-container-high">
             <span
-              className={`w-2 h-2 rounded-full ${
-                connectionStatus === 'connected'
-                  ? 'bg-status-low animate-pulse'
-                  : connectionStatus === 'connecting'
+              className={`w-2 h-2 rounded-full ${connectionStatus === 'connected'
+                ? 'bg-status-low animate-pulse'
+                : connectionStatus === 'connecting'
                   ? 'bg-status-medium animate-ping'
                   : 'bg-status-high'
-              }`}
+                }`}
             ></span>
             <span className="font-mono text-[11px] text-text-primary uppercase tracking-wide">
               {connectionStatus === 'connected' ? 'Connected' : connectionStatus || 'STANDBY'}
@@ -118,11 +109,10 @@ export function Header({
               aria-label="Toggle Voice Announcements"
               onClick={onToggleVoice}
               title={voiceEnabled ? 'Voice Announcements Active' : 'Voice Announcements Muted'}
-              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
-                voiceEnabled
-                  ? 'bg-surface-container-high text-secondary'
-                  : 'bg-surface-container-high text-text-muted hover:text-on-surface'
-              }`}
+              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${voiceEnabled
+                ? 'bg-surface-container-high text-secondary'
+                : 'bg-surface-container-high text-text-muted hover:text-on-surface'
+                }`}
               type="button"
             >
               <span className="material-symbols-outlined text-[18px]">
@@ -135,11 +125,10 @@ export function Header({
               aria-label="Toggle Audio Alerts"
               onClick={onToggleSound}
               title={soundEnabled ? 'Chime Sirens Enabled' : 'Chime Sirens Muted'}
-              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
-                soundEnabled
-                  ? 'bg-surface-container-high text-primary'
-                  : 'bg-surface-container-high text-text-muted hover:text-on-surface'
-              }`}
+              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${soundEnabled
+                ? 'bg-surface-container-high text-primary'
+                : 'bg-surface-container-high text-text-muted hover:text-on-surface'
+                }`}
               type="button"
             >
               <span className="material-symbols-outlined text-[18px]">
@@ -147,34 +136,8 @@ export function Header({
               </span>
             </button>
 
-            {/* Visual Theme Toggle */}
-            <button
-              aria-label="Toggle Visual Theme"
-              onClick={onToggleDarkMode}
-              title={darkMode ? 'Dark Theme (Nominal)' : 'Light Theme'}
-              className="w-9 h-9 flex items-center justify-center rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface transition-colors"
-              type="button"
-            >
-              <span className="material-symbols-outlined text-[18px]">
-                {darkMode ? 'dark_mode' : 'light_mode'}
-              </span>
-            </button>
 
-            {/* Live Settings Drawer Button */}
-            <button
-              aria-label="Detection Threshold Settings"
-              onClick={() => setActiveTab('settings')}
-              title="Open Settings"
-              className={`flex items-center gap-space-xs h-9 px-space-sm rounded-lg transition-colors ${
-                activeTab === 'settings'
-                  ? 'bg-surface-container-highest text-primary'
-                  : 'bg-surface-container-high hover:bg-surface-container-highest text-on-surface'
-              }`}
-              type="button"
-            >
-              <span className="material-symbols-outlined text-[18px]">tune</span>
-              <span className="hidden xl:inline font-semibold text-xs">Settings</span>
-            </button>
+
 
             {/* User Profile Avatar */}
             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-space-xs shadow-sm">

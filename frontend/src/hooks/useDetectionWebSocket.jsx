@@ -33,7 +33,7 @@ export function useDetectionWebSocket(sessionId) {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${window.location.host}/ws/detection?session_id=${encodeURIComponent(sessionId)}`
-    
+
     let ws
     try {
       ws = new WebSocket(wsUrl)
@@ -75,7 +75,7 @@ export function useDetectionWebSocket(sessionId) {
       setConnectionStatus('disconnected')
       // Auto-reconnect for unexpected drops
       reconnectTimeoutRef.current = window.setTimeout(() => {
-        if (sessionId) connect()
+        if (sessionId) connectRef.current()
       }, 2000)
     }
 
@@ -84,19 +84,25 @@ export function useDetectionWebSocket(sessionId) {
     }
   }, [sessionId])
 
+  // Stable refs so the sessionId effect never re-runs due to callback identity changes
+  const connectRef = useRef(connect)
+  const disconnectRef = useRef(disconnect)
+  useEffect(() => { connectRef.current = connect }, [connect])
+  useEffect(() => { disconnectRef.current = disconnect }, [disconnect])
+
   useEffect(() => {
     if (sessionId) {
-      connect()
+      connectRef.current()
     } else {
-      disconnect()
+      disconnectRef.current()
       setLatestFrame(null)
       setErrorMessage(null)
     }
 
     return () => {
-      disconnect()
+      disconnectRef.current()
     }
-  }, [sessionId, connect, disconnect])
+  }, [sessionId]) // only re-run when the session actually changes
 
   return { latestFrame, connect, disconnect, connectionStatus, errorMessage }
 }

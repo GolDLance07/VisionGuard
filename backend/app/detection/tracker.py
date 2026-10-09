@@ -10,13 +10,19 @@ from app.schemas.detection import DetectedObject, BoundingBox, get_hazard_catego
 
 class Tracker:
     def __init__(self):
-        self.config = get_config()
-        self.model = YOLO(self.config.model_path)
-        self.track_expiry = self.config.track_expiry_frames
+        _cfg = get_config()
+        self.model = YOLO(_cfg.model_path)
         self._track_history: dict[int, int] = {}  # track_id -> frames_since_seen
+
+    @property
+    def config(self):
+        """Always return the live singleton — reflects /config updates."""
+        return get_config()
 
     def track(self, frame: np.ndarray) -> list[DetectedObject]:
         """Run tracking on a single frame, return objects with persistent IDs."""
+        config = get_config()  # live snapshot
+        track_expiry = config.track_expiry_frames
         results = self.model.track(frame, persist=True, verbose=False)[0]
         objects = []
 
@@ -28,7 +34,7 @@ class Tracker:
         current_ids = set(track_ids)
 
         # Remove expired tracks
-        expired = [tid for tid, age in self._track_history.items() if age > self.track_expiry]
+        expired = [tid for tid, age in self._track_history.items() if age > track_expiry]
         for tid in expired:
             del self._track_history[tid]
 
@@ -37,11 +43,11 @@ class Tracker:
             class_name = self.model.names[cls_id]
             confidence = float(box.conf[0])
 
-            if confidence < self.config.detection_confidence_threshold:
+            if confidence < config.detection_confidence_threshold:
                 continue
 
             # Only track unsafe classes + person
-            if class_name not in self.config.unsafe_classes and class_name != "person":
+            if class_name not in config.unsafe_classes and class_name != "person":
                 continue
 
             x1, y1, x2, y2 = map(float, box.xyxy[0])

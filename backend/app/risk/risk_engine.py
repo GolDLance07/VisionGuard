@@ -17,14 +17,9 @@ logger = logging.getLogger(__name__)
 
 class RiskEngine:
     def __init__(self):
-        self.config = get_config()
-        self.weights = self.config.score_weights
-        self.cutoffs = self.config.risk_cutoffs
-        self.persistence_window = self.config.persistence_window
-        self.min_persistence = self.config.min_persistence_duration
-
+        cfg = get_config()
         # Persistence tracking
-        self.high_history: deque[tuple[float, bool]] = deque(maxlen=self.persistence_window)
+        self.high_history: deque[tuple[float, bool]] = deque(maxlen=cfg.persistence_window)
         self.first_high_time: Optional[float] = None
 
         # Distance trend tracking (person-object min distance history)

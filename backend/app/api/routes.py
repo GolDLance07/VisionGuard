@@ -5,12 +5,18 @@ All endpoints access the shared VideoStreamManager from app.state.
 import os
 import shutil
 import logging
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File
+import uuid
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Depends
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.video.stream import VideoSource
-from app.risk.config import RiskConfig
+from app.risk.config import RiskConfig, get_config, update_config
 from app.schemas.detection import ConfigResponse
+from app.db.database import get_db, is_db_available
+from app.db.models import IncidentModel
+from app.integrations.cloudinary import upload_frame_snapshot
 
 router = APIRouter(tags=["api"])
 logger = logging.getLogger(__name__)
@@ -113,7 +119,7 @@ async def stop_session(req: Request, body: SessionStopRequest | None = None, ses
     return {"status": "stopped"}
 
 
-# Forensic incident records (Context1.md #18)
+# In-memory fallback store (used when DATABASE_URL is not configured)
 _INCIDENTS_STORE: list[dict] = []
 
 
@@ -126,30 +132,61 @@ class IncidentRecord(BaseModel):
     title: str
     primaryReason: str
     reasons: list[dict] = []
-    frame: str | None = None
+    frame: str | None = None          # base64 JPEG from frontend
     detectedClasses: list[str] = []
 
 
 @router.get("/incidents")
-async def get_incidents():
-    """Retrieve logged incidents for audit and forensic review."""
+async def get_incidents(db: AsyncSession = Depends(get_db) if is_db_available() else Depends(lambda: None)):
+    """Retrieve logged incidents — from PostgreSQL if available, else in-memory."""
+    if is_db_available() and db is not None:
+        from sqlalchemy import select
+        result = await db.execute(
+            select(IncidentModel).order_by(IncidentModel.timestamp.desc()).limit(100)
+        )
+        rows = result.scalars().all()
+        return {"incidents": [r.to_dict() for r in rows]}
     return {"incidents": _INCIDENTS_STORE}
 
 
 @router.post("/incidents")
-async def log_incident(incident: IncidentRecord):
-    """Store an incident record."""
+async def log_incident(
+    incident: IncidentRecord,
+    db: AsyncSession = Depends(get_db) if is_db_available() else Depends(lambda: None),
+):
+    """Store an incident record — persists to PostgreSQL and uploads frame to Cloudinary."""
+    incident_id = incident.id or f"inc-{uuid.uuid4().hex[:8]}"
+
+    # Upload frame snapshot to Cloudinary (non-blocking), replace base64 with URL
+    frame_url: str | None = None
+    if incident.frame:
+        frame_url = await upload_frame_snapshot(incident.frame, incident_id)
+
+    if is_db_available() and db is not None:
+        row = IncidentModel(
+            id=incident_id,
+            timestamp=incident.timestamp,
+            time_str=incident.timeStr,
+            risk_score=incident.riskScore,
+            risk_level=incident.riskLevel,
+            title=incident.title,
+            primary_reason=incident.primaryReason,
+            reasons=incident.reasons,
+            detected_classes=incident.detectedClasses,
+            frame_url=frame_url,
+        )
+        db.add(row)
+        # session committed by get_db() dependency on exit
+        return {"status": "recorded", "incident": row.to_dict()}
+
+    # Fallback: in-memory store
     data = incident.model_dump()
-    if not data.get("id"):
-        import uuid
-        data["id"] = f"inc-{uuid.uuid4().hex[:8]}"
+    data["id"] = incident_id
+    data["frame"] = frame_url  # swap base64 for URL (or None)
     _INCIDENTS_STORE.insert(0, data)
     if len(_INCIDENTS_STORE) > 100:
         _INCIDENTS_STORE.pop()
     return {"status": "recorded", "incident": data}
-
-
-from app.risk.config import RiskConfig, get_config, update_config
 
 
 class ConfigUpdateRequest(BaseModel):

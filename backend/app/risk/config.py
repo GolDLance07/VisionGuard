@@ -70,13 +70,23 @@ def get_config() -> RiskConfig:
 
 
 def update_config(updates: dict) -> RiskConfig:
+    """Return a new validated config with the given updates applied.
+
+    Dict-typed fields are merged (shallow); all other fields are replaced.
+    The singleton is replaced atomically so concurrent readers always see a
+    fully-validated RiskConfig.
+    """
     global _config_instance
     cfg = get_config()
+    merged: dict = {}
     for k, v in updates.items():
-        if hasattr(cfg, k) and v is not None:
-            curr = getattr(cfg, k)
-            if isinstance(curr, dict) and isinstance(v, dict):
-                curr.update(v)
-            else:
-                setattr(cfg, k, v)
-    return cfg
+        if v is None or not hasattr(cfg, k):
+            continue
+        curr = getattr(cfg, k)
+        if isinstance(curr, dict) and isinstance(v, dict):
+            merged[k] = {**curr, **v}
+        else:
+            merged[k] = v
+    # model_copy validates via Pydantic; won't silently accept bad values
+    _config_instance = cfg.model_copy(update=merged)
+    return _config_instance

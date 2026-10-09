@@ -110,9 +110,7 @@ export function SettingsView({ config, onConfigSaved, soundEnabled, onToggleSoun
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-space-md">
           <div className="flex flex-col gap-space-xs">
             <div className="flex items-center gap-space-xs">
-              <span className="font-mono text-[11px] text-primary uppercase tracking-widest font-bold">
-                SYS-PARAM // PROTOCOL 3.1
-              </span>
+
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
               <span className="font-mono text-[11px] text-text-muted">STATE: SYNCHRONIZED</span>
             </div>
@@ -189,11 +187,10 @@ export function SettingsView({ config, onConfigSaved, soundEnabled, onToggleSoun
                 <button
                   type="button"
                   onClick={() => setModel('models/yolov8s.pt')}
-                  className={`p-2.5 rounded-lg border text-left transition-all ${
-                    model.includes('yolov8s')
-                      ? 'border-primary bg-primary/10 text-text-primary'
-                      : 'border-surface-border bg-surface-container-high text-text-muted hover:text-text-primary'
-                  }`}
+                  className={`p-2.5 rounded-lg border text-left transition-all ${model.includes('yolov8s')
+                    ? 'border-primary bg-primary/10 text-text-primary'
+                    : 'border-surface-border bg-surface-container-high text-text-muted hover:text-text-primary'
+                    }`}
                 >
                   <div className="font-semibold text-xs flex items-center justify-between">
                     <span>YOLOv8s (Small)</span>
@@ -207,11 +204,10 @@ export function SettingsView({ config, onConfigSaved, soundEnabled, onToggleSoun
                 <button
                   type="button"
                   onClick={() => setModel('models/yolov8n.pt')}
-                  className={`p-2.5 rounded-lg border text-left transition-all ${
-                    model.includes('yolov8n')
-                      ? 'border-primary bg-primary/10 text-text-primary'
-                      : 'border-surface-border bg-surface-container-high text-text-muted hover:text-text-primary'
-                  }`}
+                  className={`p-2.5 rounded-lg border text-left transition-all ${model.includes('yolov8n')
+                    ? 'border-primary bg-primary/10 text-text-primary'
+                    : 'border-surface-border bg-surface-container-high text-text-muted hover:text-text-primary'
+                    }`}
                 >
                   <div className="font-semibold text-xs flex items-center justify-between">
                     <span>YOLOv8n (Nano)</span>
@@ -488,9 +484,7 @@ export function SettingsView({ config, onConfigSaved, soundEnabled, onToggleSoun
                   </span>
                 </div>
               </div>
-              <span className="px-space-xs py-0.5 rounded-full bg-status-low/10 text-status-low font-mono text-[10px] font-bold">
-                AUDIO READY
-              </span>
+
             </div>
 
             {/* Chime Toggle */}
@@ -555,11 +549,10 @@ export function SettingsView({ config, onConfigSaved, soundEnabled, onToggleSoun
                   <button
                     key={opt}
                     onClick={() => setWarningTimeout(opt)}
-                    className={`py-2 px-space-xs rounded font-mono text-[10px] font-bold text-center transition-colors border ${
-                      warningTimeout === opt
-                        ? 'bg-primary-container text-on-primary-container border-primary shadow-sm'
-                        : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest border-surface-border/40'
-                    }`}
+                    className={`py-2 px-space-xs rounded font-mono text-[10px] font-bold text-center transition-colors border ${warningTimeout === opt
+                      ? 'bg-primary-container text-on-primary-container border-primary shadow-sm'
+                      : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest border-surface-border/40'
+                      }`}
                     type="button"
                   >
                     {opt === 'manual' ? 'MANUAL ONLY' : `${opt} SECONDS`}
@@ -588,13 +581,7 @@ export function SettingsView({ config, onConfigSaved, soundEnabled, onToggleSoun
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-sm">
-              <div className="bg-surface-container rounded-lg p-space-sm flex flex-col gap-1 border border-surface-border/40">
-                <label className="font-mono text-[10px] text-text-muted uppercase font-bold">Optical Device</label>
-                <select className="w-full bg-surface-container-high text-text-primary font-sans text-xs rounded px-2 py-1.5 focus:outline-none border border-surface-border/60">
-                  <option value="cam-0">Integrated HD Sensor (Built-in)</option>
-                  <option selected value="cam-1">USB 4K Industrial Node (Cam #2)</option>
-                </select>
-              </div>
+
 
               <div className="bg-surface-container rounded-lg p-space-sm flex flex-col gap-1 border border-surface-border/40">
                 <label className="font-mono text-[10px] text-text-muted uppercase font-bold">Resolution / FPS</label>
@@ -614,11 +601,10 @@ export function SettingsView({ config, onConfigSaved, soundEnabled, onToggleSoun
               <div className="grid grid-cols-2 gap-space-sm">
                 <div
                   onClick={() => setBackendEngine('webgpu')}
-                  className={`cursor-pointer rounded-lg p-space-md transition-all flex flex-col gap-space-xs border-2 ${
-                    backendEngine === 'webgpu'
-                      ? 'border-primary bg-primary/10 shadow-sm'
-                      : 'border-surface-border bg-surface-container hover:bg-surface-container-high'
-                  }`}
+                  className={`cursor-pointer rounded-lg p-space-md transition-all flex flex-col gap-space-xs border-2 ${backendEngine === 'webgpu'
+                    ? 'border-primary bg-primary/10 shadow-sm'
+                    : 'border-surface-border bg-surface-container hover:bg-surface-container-high'
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-xs text-primary">WebGPU</span>
@@ -636,11 +622,10 @@ export function SettingsView({ config, onConfigSaved, soundEnabled, onToggleSoun
 
                 <div
                   onClick={() => setBackendEngine('wasm')}
-                  className={`cursor-pointer rounded-lg p-space-md transition-all flex flex-col gap-space-xs border-2 ${
-                    backendEngine === 'wasm'
-                      ? 'border-primary bg-primary/10 shadow-sm'
-                      : 'border-surface-border bg-surface-container hover:bg-surface-container-high'
-                  }`}
+                  className={`cursor-pointer rounded-lg p-space-md transition-all flex flex-col gap-space-xs border-2 ${backendEngine === 'wasm'
+                    ? 'border-primary bg-primary/10 shadow-sm'
+                    : 'border-surface-border bg-surface-container hover:bg-surface-container-high'
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-xs text-text-primary">WASM SIMD</span>
@@ -657,41 +642,12 @@ export function SettingsView({ config, onConfigSaved, soundEnabled, onToggleSoun
             </div>
           </div>
 
-          {/* SECTION 5: Data Isolation & Memory Privacy */}
-          <div className="bg-surface-container-low rounded-xl p-space-lg border border-surface-border/80 shadow-sm flex flex-col gap-space-md">
-            <div className="flex items-center justify-between pb-space-xs border-b border-surface-border/40">
-              <div className="flex items-center gap-space-sm">
-                <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center">
-                  <span className="material-symbols-outlined text-outline text-[18px]">lock</span>
-                </div>
-                <div className="flex flex-col">
-                  <h2 className="font-semibold text-sm text-text-primary">
-                    Data Isolation &amp; Local Persistence
-                  </h2>
-                  <span className="font-mono text-[10px] text-text-muted">
-                    Strict local sandbox compliance
-                  </span>
-                </div>
-              </div>
-              <span className="font-mono text-[10px] text-status-low font-bold">ISOLATED</span>
-            </div>
 
-            <div className="bg-surface-container rounded-lg p-space-md flex items-start gap-space-sm border border-surface-border/40">
-              <span className="material-symbols-outlined text-primary text-[20px] mt-0.5 shrink-0">
-                shield_lock
-              </span>
-              <div className="flex flex-col">
-                <span className="font-sans text-xs text-text-primary font-semibold">
-                  Zero-Persistence RAM Guarantee
-                </span>
-                <p className="font-sans text-[11px] text-text-muted mt-0.5 leading-relaxed">
-                  Frames remain in ephemeral GPU / VRAM buffers. No footage is transferred or stored on external cloud infrastructure.
-                </p>
-              </div>
-            </div>
-          </div>
+
         </div>
       </div>
     </div>
+
+
   )
 }

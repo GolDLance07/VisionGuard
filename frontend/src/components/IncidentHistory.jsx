@@ -279,22 +279,8 @@ export function IncidentHistory({ incidents = [], onClear }) {
                 Clear Log ({incidents.length})
               </button>
             )}
-            <button
-              onClick={exportCSV}
-              className="h-9 px-space-md flex items-center gap-space-xs rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-semibold text-xs transition-colors shadow-sm border border-surface-border/60"
-              type="button"
-            >
-              <span className="material-symbols-outlined text-[18px] text-text-muted">download</span>
-              <span>Export Audit CSV</span>
-            </button>
-            <button
-              onClick={exportCSV}
-              className="h-9 px-space-md flex items-center gap-space-xs rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-semibold text-xs transition-colors shadow-sm border border-surface-border/60"
-              type="button"
-            >
-              <span className="material-symbols-outlined text-[18px] text-primary">folder_zip</span>
-              <span>Download Frame Archive</span>
-            </button>
+
+
           </div>
         </div>
 
@@ -371,15 +357,7 @@ export function IncidentHistory({ incidents = [], onClear }) {
 
           {/* Source Camera Dropdown */}
           <div className="lg:col-span-2 relative">
-            <select
-              value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value)}
-              className="w-full h-10 px-space-sm rounded-lg bg-surface-container-highest text-on-surface font-semibold text-xs appearance-none focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer pr-8 border border-surface-border/40"
-            >
-              <option value="ALL">All Sources</option>
-              <option value="CAM-01">CAM-01 (Fabrication)</option>
-              <option value="CAM-02">CAM-02 (Assembly)</option>
-            </select>
+
             <span className="material-symbols-outlined absolute right-2.5 top-2.5 text-text-muted text-[18px] pointer-events-none">
               videocam
             </span>
@@ -790,14 +768,7 @@ export function IncidentHistory({ incidents = [], onClear }) {
                         : 'Mark Verified Hazard'}
                     </span>
                   </button>
-                  <button
-                    onClick={() => handleStatusChange('Flagged Benign')}
-                    className="h-9 px-space-sm flex items-center justify-center gap-space-xs rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-semibold text-xs transition-colors border border-surface-border/60"
-                    type="button"
-                  >
-                    <span className="material-symbols-outlined text-[18px] text-text-muted">flag</span>
-                    <span>Flag Benign Prop</span>
-                  </button>
+
                 </div>
 
                 {/* Notes Input */}

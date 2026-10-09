@@ -20,10 +20,6 @@ export function SafetyTelemetryView({ latestFrame, config }) {
 
         <div className="flex items-center gap-space-sm font-mono text-xs">
           <div className="px-3 py-1.5 rounded-lg bg-surface-container-high border border-surface-border/60 flex items-center gap-2">
-            <span className="text-text-muted">STATUS:</span>
-            <span className="text-status-low font-bold">ONLINE (LOCAL GPU)</span>
-          </div>
-          <div className="px-3 py-1.5 rounded-lg bg-surface-container-high border border-surface-border/60 flex items-center gap-2">
             <span className="text-text-muted">MODEL:</span>
             <span className="text-primary font-bold">{config?.model_path || 'yolov8n.pt'}</span>
           </div>
@@ -114,7 +110,7 @@ export function SafetyTelemetryView({ latestFrame, config }) {
               <line x1="0" y1="20" x2="300" y2="20" stroke="#233546" strokeDasharray="2,2" strokeWidth="1" />
               <line x1="0" y1="50" x2="300" y2="50" stroke="#233546" strokeDasharray="2,2" strokeWidth="1" />
               <line x1="0" y1="80" x2="300" y2="80" stroke="#233546" strokeDasharray="2,2" strokeWidth="1" />
-              
+
               {/* Latency Curve */}
               <path
                 d="M0,60 Q30,55 60,62 T120,48 T180,65 T240,52 T300,58"

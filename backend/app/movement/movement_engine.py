@@ -76,9 +76,10 @@ class MovementState:
 
 class MovementEngine:
     def __init__(self):
-        self.config = get_config()
         self.track_states: dict[int, MovementState] = {}
-        self.window_size = self.config.smoothing_window
+
+    def _window_size(self) -> int:
+        return get_config().smoothing_window
 
     def update(self, objects: list[DetectedObject], timestamp: float) -> dict[int, dict]:
         """Update movement state for each tracked object."""
@@ -92,7 +93,7 @@ class MovementEngine:
             current_ids.add(obj.id)
 
             if obj.id not in self.track_states:
-                self.track_states[obj.id] = MovementState(self.window_size)
+                self.track_states[obj.id] = MovementState(self._window_size())
 
             self.track_states[obj.id].update(center_x, center_y, timestamp, bbox_h)
             state = self.track_states[obj.id]
