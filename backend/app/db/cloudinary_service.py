@@ -11,11 +11,19 @@ env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 cloudinary_url = os.getenv("CLOUDINARY_URL", "").strip().strip('"').strip("'")
+while cloudinary_url.startswith("CLOUDINARY_URL="):
+    cloudinary_url = cloudinary_url.split("CLOUDINARY_URL=", 1)[1].strip().strip('"').strip("'")
 cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME", "").strip().strip('"').strip("'")
 api_key = os.getenv("CLOUDINARY_API_KEY", "").strip().strip('"').strip("'")
 api_secret = os.getenv("CLOUDINARY_API_SECRET", "").strip().strip('"').strip("'")
 
 cloudinary_initialized = False
+
+# Prevent the Cloudinary SDK auto-loader from raising a stderr error on placeholder strings
+if "CLOUDINARY_URL" in os.environ:
+    raw_env_url = os.environ["CLOUDINARY_URL"]
+    if "<" in raw_env_url or ">" in raw_env_url or not raw_env_url.startswith("cloudinary://"):
+        del os.environ["CLOUDINARY_URL"]
 
 try:
     import cloudinary
@@ -24,14 +32,16 @@ try:
     if cloudinary_url and cloudinary_url.startswith("cloudinary://"):
         # Configure directly via full Cloudinary environment URL
         # format: cloudinary://<api_key>:<api_secret>@<cloud_name>
-        cloudinary.config(cloudinary_url=cloudinary_url, secure=True)
-        conf = cloudinary.Config()
-        # Verify it is not a placeholder with '<' or '>'
-        if conf.cloud_name and "<" not in conf.cloud_name and conf.api_key and "<" not in conf.api_key:
-            cloudinary_initialized = True
-            logger.info(f"Cloudinary initialized via CLOUDINARY_URL for cloud: {conf.cloud_name}")
-        else:
+        if "<" in cloudinary_url or ">" in cloudinary_url:
             logger.info("Cloudinary CLOUDINARY_URL contains placeholder values; local fallback active.")
+        else:
+            cloudinary.config(cloudinary_url=cloudinary_url, secure=True)
+            conf = cloudinary.Config()
+            if conf.cloud_name and conf.api_key:
+                cloudinary_initialized = True
+                logger.info(f"Cloudinary initialized via CLOUDINARY_URL for cloud: {conf.cloud_name}")
+            else:
+                logger.info("Cloudinary CLOUDINARY_URL missing cloud_name or api_key; local fallback active.")
     elif cloud_name and api_key and api_secret:
         if "<" not in cloud_name and "<" not in api_key:
             cloudinary.config(

@@ -23,21 +23,53 @@ SessionLocal = None
 Base = declarative_base()
 
 
+def normalize_database_url(raw_url: str) -> str:
+    if not raw_url:
+        return ""
+    url = raw_url.strip()
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+
+    # Automatically adapt to whichever driver is installed (psycopg v3 or psycopg2)
+    if url.startswith("postgresql://") and not (
+        url.startswith("postgresql+psycopg://") or url.startswith("postgresql+psycopg2://")
+    ):
+        has_psycopg3 = False
+        has_psycopg2 = False
+        try:
+            import psycopg  # noqa: F401
+            has_psycopg3 = True
+        except ImportError:
+            pass
+
+        try:
+            import psycopg2  # noqa: F401
+            has_psycopg2 = True
+        except ImportError:
+            pass
+
+        if has_psycopg3:
+            url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+        elif has_psycopg2:
+            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+    return url
+
+
 def get_engine():
     global engine, SessionLocal, DATABASE_URL
     if engine is not None:
         return engine
 
     raw_url = os.getenv("DATABASE_URL", "").strip()
-    if raw_url.startswith("postgres://"):
-        raw_url = raw_url.replace("postgres://", "postgresql://", 1)
+    db_url = normalize_database_url(raw_url)
 
     # Check if a valid Neon / PostgreSQL connection string is provided
-    if raw_url and (raw_url.startswith("postgresql://") or raw_url.startswith("postgresql+psycopg2://")):
+    if db_url and db_url.startswith("postgresql"):
         try:
             logger.info("Connecting to Neon PostgreSQL database...")
             engine = create_engine(
-                raw_url,
+                db_url,
                 pool_pre_ping=True,      # Automatically reconnect if Neon serverless pauses
                 pool_recycle=300,        # Recycle connections every 5 mins
                 pool_size=5,
