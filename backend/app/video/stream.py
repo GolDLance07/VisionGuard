@@ -195,9 +195,9 @@ class VideoStreamManager:
                 f"objects={len(objects)} reasons={[r.rule for r in risk_frame.reasons]}"
             )
 
-            # Encode frame to JPEG and base64 for browser
+            # Encode frame to JPEG and base64 for browser (quality 55 for high throughput)
             _, buf = cv2.imencode(
-                ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75]
+                ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 55]
             )
             frame_b64 = base64.b64encode(buf).decode("utf-8")
 

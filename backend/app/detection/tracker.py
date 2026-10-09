@@ -9,16 +9,18 @@ from app.schemas.detection import DetectedObject, BoundingBox, get_hazard_catego
 
 
 import torch
-
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 _GLOBAL_MODEL = None
 
 
-def get_shared_models(config):
+def get_shared_models(config=None):
     """
     Singleton model cache: loads YOLO weights deterministically from refactor models.
-    Per refactor audit, resolves paths deterministically and removes unused pose/weapon models.
+    Per refactor audit, resolves paths deterministically and ensures valid .pt files for Ultralytics.
     """
     global _GLOBAL_MODEL
 
@@ -27,6 +29,7 @@ def get_shared_models(config):
         repo_root = backend_dir.parent
         refactor_dir = repo_root / "refactor"
         models_dir = backend_dir / "models"
+        models_dir.mkdir(parents=True, exist_ok=True)
 
         is_cloud = bool(os.environ.get("RENDER") or os.environ.get("PORT") or os.environ.get("LOW_MEMORY"))
         if is_cloud:
@@ -35,28 +38,41 @@ def get_shared_models(config):
             except Exception:
                 pass
 
-        # Determine target model: use yolov8n in cloud/low-memory, otherwise yolov8s
-        target_name = "yolov8n.pt" if is_cloud else "yolov8s.pt"
+        # Target model from config (default yolov8n.pt)
+        config_model_name = Path(config.model_path).name if config and getattr(config, "model_path", None) else "yolov8n.pt"
+        target_name = config_model_name
 
         # Search candidates prioritizing the refactor directory
         candidates = [
             refactor_dir / target_name,
-            refactor_dir / f"{target_name}.zip",
             models_dir / target_name,
+            refactor_dir / f"{target_name}.zip",
             refactor_dir / "yolov8n.pt",
-            refactor_dir / "yolov8n.pt.zip",
             models_dir / "yolov8n.pt",
+            refactor_dir / "yolov8n.pt.zip",
+            refactor_dir / "yolov8s.pt",
+            refactor_dir / "yolov8s.pt.zip",
+            models_dir / "yolov8s.pt",
         ]
 
         resolved_path = None
         for candidate in candidates:
             if candidate.exists():
-                resolved_path = str(candidate)
+                if candidate.suffix == ".zip":
+                    # Ultralytics rejects .zip suffix; unpack or copy to .pt counterpart
+                    pt_target = candidate.with_suffix("")
+                    if not pt_target.exists():
+                        import shutil
+                        shutil.copyfile(candidate, pt_target)
+                    resolved_path = str(pt_target)
+                else:
+                    resolved_path = str(candidate)
                 break
 
         if not resolved_path:
             resolved_path = target_name
 
+        logger.info(f"Loading YOLO tracking model from: {resolved_path}")
         _GLOBAL_MODEL = YOLO(resolved_path)
 
     return _GLOBAL_MODEL, None, None
