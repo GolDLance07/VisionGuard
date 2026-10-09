@@ -33,9 +33,14 @@ export function useDetectionWebSocket(sessionId) {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const customWsBase = import.meta.env.VITE_WS_URL
-    const wsUrl = customWsBase
-      ? `${customWsBase.replace(/\/+$/, '')}/detection?session_id=${encodeURIComponent(sessionId)}`
-      : `${protocol}//${window.location.host}/ws/detection?session_id=${encodeURIComponent(sessionId)}`
+    let wsUrl
+    if (customWsBase) {
+      const base = customWsBase.replace(/\/+$/, '')
+      const path = base.endsWith('/ws') ? '/detection' : '/ws/detection'
+      wsUrl = `${base}${path}?session_id=${encodeURIComponent(sessionId)}`
+    } else {
+      wsUrl = `${protocol}//${window.location.host}/ws/detection?session_id=${encodeURIComponent(sessionId)}`
+    }
     
     let ws
     try {

@@ -116,7 +116,7 @@ async def stop_session(req: Request, body: SessionStopRequest | None = None, ses
 # Forensic incident records (Neon / Database + Cloudinary Snapshots)
 import json
 import uuid
-from app.db.database import SessionLocal
+from app.db.database import get_session
 from app.db.models import IncidentRecordModel
 from app.db.cloudinary_service import upload_snapshot, is_cloudinary_configured
 
@@ -156,7 +156,7 @@ async def get_cloud_status():
 async def get_incidents():
     """Retrieve logged incidents from database with in-memory fallback."""
     try:
-        session = SessionLocal()
+        session = get_session()
         try:
             records = session.query(IncidentRecordModel).order_by(IncidentRecordModel.created_at.desc()).limit(100).all()
             if records:
@@ -186,7 +186,7 @@ async def log_incident(incident: IncidentRecord):
 
     # 2. Persist in Database (Neon PostgreSQL)
     try:
-        session = SessionLocal()
+        session = get_session()
         try:
             db_record = IncidentRecordModel(
                 id=data["id"],

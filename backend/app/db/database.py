@@ -90,14 +90,19 @@ def get_engine():
     return engine
 
 
-def get_db():
+def get_session():
+    global SessionLocal
     if SessionLocal is None:
         get_engine()
-    db = SessionLocal()
+    return SessionLocal()
+
+
+def get_db():
+    session = get_session()
     try:
-        yield db
+        yield session
     finally:
-        db.close()
+        session.close()
 
 
 def init_db():

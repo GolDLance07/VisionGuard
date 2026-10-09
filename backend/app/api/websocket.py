@@ -1,14 +1,19 @@
 """
 WebSocket endpoint for real-time detection streaming.
+Supports multiple URL paths (/ws/detection, /detection, /api/ws/detection)
+for flexible reverse proxying and PaaS deployment compatibility.
 """
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Request
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState
 
 
-router = APIRouter(prefix="/ws", tags=["websocket"])
+router = APIRouter(tags=["websocket"])
 
 
+@router.websocket("/ws/detection")
 @router.websocket("/detection")
+@router.websocket("/api/ws/detection")
+@router.websocket("/api/detection")
 async def detection_websocket(websocket: WebSocket, session_id: str):
     await websocket.accept()
     stream_manager = websocket.app.state.stream_manager
