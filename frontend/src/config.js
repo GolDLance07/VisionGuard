@@ -38,3 +38,18 @@ export function getRuntimeConfig() {
     mode: import.meta.env.MODE,
   }
 }
+
+export function getSnapshotUrl(incident) {
+  if (!incident) return null
+  const src = incident.imageUrl || incident.frame
+  if (!src || typeof src !== 'string') return null
+  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+    return src
+  }
+  if (src.startsWith('/')) {
+    const base = getApiBase()
+    return base ? `${base}${src}` : src
+  }
+  return `data:image/jpeg;base64,${src}`
+}
+

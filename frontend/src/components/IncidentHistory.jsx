@@ -1,19 +1,5 @@
-import React, { useState } from 'react'
-import { getApiBase } from '../config'
-
-export function getSnapshotUrl(incident) {
-  if (!incident) return null
-  const src = incident.imageUrl || incident.frame
-  if (!src || typeof src !== 'string') return null
-  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
-    return src
-  }
-  if (src.startsWith('/')) {
-    const base = getApiBase()
-    return base ? `${base}${src}` : src
-  }
-  return `data:image/jpeg;base64,${src}`
-}
+import React, { useState, useEffect } from 'react'
+import { getApiBase, getSnapshotUrl } from '../config'
 
 export function IncidentHistory({ incidents = [], onClear }) {
   const [selectedId, setSelectedId] = useState(incidents[0]?.id || 'inc-default')
@@ -221,6 +207,15 @@ export function IncidentHistory({ incidents = [], onClear }) {
     filtered.find((i) => i.id === selectedId) ||
     filtered[0] ||
     allIncidents[0]
+
+  // Auto-select latest incident when live incidents arrive
+  useEffect(() => {
+    if (incidents.length > 0) {
+      if (selectedId === 'inc-default' || !allIncidents.some((i) => i.id === selectedId)) {
+        setSelectedId(incidents[0].id)
+      }
+    }
+  }, [incidents])
 
   const totalToday = allIncidents.length + 10
   const highCriticality = allIncidents.filter((i) => i.riskLevel === 'HIGH' || i.riskLevel === 'high').length
@@ -674,51 +669,50 @@ export function IncidentHistory({ incidents = [], onClear }) {
                   <img
                     src={getSnapshotUrl(activeIncident)}
                     alt="Captured Incident Evidence"
-                    className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-300"
+                    className="w-full h-full object-contain transition-transform group-hover:scale-105 duration-300"
                   />
                 ) : (
-                  <img
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBVFujQOvuX0tGAK2S4ZXX8frv1MCV3c1AO1jOlh3ljXTWGcrshuz3LjxXxTlZCbv-npxDI2QoOJjrBE8MHFWCnsa2xe2-z2pNx2Yg7HgM-SU3-MiIW683w9LKV3cLO78VEvEqoNLtZIE_8Llemt5iggnOTNYcnI3GEJMBRrQIJ0ruz1UOamFh380RU8QPoi3XokdEHFmKLNA8Lo4hqvL8kjnKgclufrldDekbIGcaCvkd6-PwyPhoj"
-                    alt="Simulated Evidence Frame"
-                    className="w-full h-full object-cover opacity-75 transition-transform group-hover:scale-105 duration-300"
-                  />
+                  <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-surface-container-low text-text-muted text-center relative overflow-hidden">
+                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#2dd4bf_1px,transparent_1px)] [background-size:16px_16px]"></div>
+                    <span className="material-symbols-outlined text-[42px] text-text-muted/60 mb-2">photo_camera</span>
+                    <span className="font-mono text-xs font-bold text-text-primary">
+                      {activeIncident.title || 'Simulated Audit Record'}
+                    </span>
+                    <span className="font-mono text-[11px] text-text-muted mt-1">
+                      {activeIncident.source} · {activeIncident.timeStr}
+                    </span>
+                    <span className="mt-3 px-2.5 py-1 rounded-full bg-surface-container-high border border-surface-border/60 text-[10px] font-mono font-semibold text-primary">
+                      Audit telemetry recorded (no image frame attached)
+                    </span>
+                  </div>
                 )}
 
-                {/* Vector Overlays for Bounding Box Reticles */}
-                <div className="absolute inset-0 pointer-events-none p-3">
-                  {/* Person Bounding Box */}
-                  <div className="absolute top-[18%] left-[12%] w-[32%] h-[68%] rounded-sm ring-2 ring-detection-person/90">
-                    <span className="absolute -top-5 left-0 px-1.5 py-0.5 bg-surface-container-lowest text-detection-person font-mono text-[10px] font-bold rounded-sm border border-detection-person/40">
-                      PERSON #1 · 97%
-                    </span>
+                {/* Detected Classes Chips */}
+                {activeIncident.detectedClasses?.length > 0 && (
+                  <div className="absolute top-2 left-2 flex flex-wrap gap-1.5 pointer-events-none z-10">
+                    {activeIncident.detectedClasses.map((cls, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2 py-0.5 rounded bg-black/80 backdrop-blur border border-detection-object/60 font-mono text-[10px] text-detection-object font-bold shadow-sm"
+                      >
+                        ⚠ {cls.toUpperCase()}
+                      </span>
+                    ))}
                   </div>
+                )}
 
-                  {/* Hazard Object Box (Orange Alert) */}
-                  <div className="absolute top-[48%] left-[44%] w-[18%] h-[22%] rounded-sm ring-2 ring-detection-object">
-                    <span className="absolute -top-5 left-0 px-1.5 py-0.5 bg-surface-container-lowest text-detection-object font-mono text-[10px] font-bold rounded-sm border border-detection-object/40">
-                      {activeIncident.detectedClasses?.[0]
-                        ? activeIncident.detectedClasses[0].toUpperCase()
-                        : 'SHARP OBJECT · 91%'}
-                    </span>
-                    <div className="absolute -inset-2 rounded-full border border-status-high/50 animate-ping"></div>
-                  </div>
+                {/* Bottom Telemetry Pill */}
+                <div className="absolute bottom-2 left-2 px-space-xs py-0.5 rounded bg-surface-container-lowest/90 backdrop-blur font-mono text-[10px] text-text-primary flex items-center gap-1.5 border border-surface-border/60 z-10">
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    activeIncident.riskLevel === 'HIGH' ? 'bg-status-high' : 'bg-status-medium'
+                  }`}></span>
+                  <span>EVIDENCE KEYFRAME · {activeIncident.timeStr} · {(activeIncident.riskScore * 100).toFixed(0)}% RISK</span>
+                </div>
 
-                  {/* HUD Crosshairs */}
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center opacity-40">
-                    <div className="w-6 h-0.5 bg-primary"></div>
-                    <div className="h-6 w-0.5 bg-primary absolute"></div>
-                  </div>
-
-                  {/* Bottom Telemetry Pill */}
-                  <div className="absolute bottom-2 left-2 px-space-xs py-0.5 rounded bg-surface-container-lowest/85 backdrop-blur font-mono text-[10px] text-text-primary flex items-center gap-1.5 border border-surface-border/50">
-                    <span className="w-1.5 h-1.5 rounded-full bg-status-high"></span>
-                    <span>KEYFRAME T-0 · {activeIncident.timeStr}</span>
-                  </div>
-
-                  {/* Zoom indicator on hover */}
-                  <div className="absolute top-2 right-2 p-1.5 rounded-full bg-surface-container-lowest/80 text-text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="material-symbols-outlined text-[16px]">zoom_in</span>
-                  </div>
+                {/* Zoom indicator on hover */}
+                <div className="absolute top-2 right-2 px-2 py-1 rounded-md bg-surface-container-lowest/90 backdrop-blur border border-surface-border text-text-primary text-[10px] font-mono flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity z-10">
+                  <span className="material-symbols-outlined text-[14px] text-primary">zoom_in</span>
+                  <span>Click to Enlarge</span>
                 </div>
               </div>
 

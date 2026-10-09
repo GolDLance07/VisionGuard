@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import JSZip from 'jszip'
-import { getApiBase, getRuntimeConfig } from '../config'
+import { getApiBase, getRuntimeConfig, getSnapshotUrl } from '../config'
 
 export function VideoPanel({
   frame,
@@ -21,6 +21,7 @@ export function VideoPanel({
   effectiveRiskLevel,
   onCaptureSnapshot,
   sendFrame,
+  incidents = [],
 }) {
   const [fullscreen, setFullscreen] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -33,7 +34,11 @@ export function VideoPanel({
   const [webcamError, setWebcamError] = useState(null)
   const [shutterFlash, setShutterFlash] = useState(false)
   const [snapshotHudNotice, setSnapshotHudNotice] = useState(false)
+  const [previewIncident, setPreviewIncident] = useState(null)
   const prevHighRiskRef = useRef(false)
+
+  const isHighRisk = effectiveRiskLevel === 'HIGH'
+  const isMedRisk = effectiveRiskLevel === 'MEDIUM'
 
   const fileInputRef = useRef(null)
   const videoContainerRef = useRef(null)
@@ -420,9 +425,6 @@ export function VideoPanel({
         .catch(console.error)
     }
   }
-
-  const isHighRisk = effectiveRiskLevel === 'HIGH'
-  const isMedRisk = effectiveRiskLevel === 'MEDIUM'
 
   const people = frame?.objects?.filter((o) => o && o.bbox && o.class_name === 'person') || []
   const unsafeObjects =
@@ -1503,6 +1505,84 @@ export function VideoPanel({
         </div>
       </div>
 
+      {/* 2.5 Recent Captured High-Risk Snapshots Shelf */}
+      <div className="w-full p-space-md rounded-xl bg-surface-container border border-surface-border/80 flex flex-col gap-space-sm shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-space-xs">
+            <span className="material-symbols-outlined text-primary text-[18px]">photo_library</span>
+            <span className="font-semibold text-xs text-text-primary">Recent Incident Snapshots</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-surface-container-highest font-mono text-[10px] text-text-muted">
+              {incidents.length} captured
+            </span>
+          </div>
+          <span className="text-[10px] font-mono text-text-muted">
+            Click any thumbnail to preview
+          </span>
+        </div>
+
+        {incidents.length > 0 ? (
+          <div className="flex items-center gap-3 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
+            {incidents.slice(0, 10).map((inc) => {
+              const snapUrl = getSnapshotUrl(inc)
+              const isSelected = previewIncident?.id === inc.id
+              return (
+                <div
+                  key={inc.id}
+                  onClick={() => setPreviewIncident(inc)}
+                  className={`shrink-0 w-36 cursor-pointer rounded-lg border transition-all duration-200 overflow-hidden bg-surface-container-lowest group ${
+                    isSelected
+                      ? 'border-primary ring-2 ring-primary/40 shadow-md'
+                      : 'border-surface-border/80 hover:border-primary/60'
+                  }`}
+                >
+                  <div className="w-full h-20 bg-black/60 relative overflow-hidden flex items-center justify-center">
+                    {snapUrl ? (
+                      <img
+                        src={snapUrl}
+                        alt="Evidence snapshot"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <span className="material-symbols-outlined text-text-muted text-[24px]">photo_camera</span>
+                    )}
+                    <span className="absolute top-1 left-1 px-1 py-0.5 rounded bg-black/75 backdrop-blur font-mono text-[9px] text-status-high font-bold border border-status-high/30">
+                      {((inc.riskScore || 0.84) * 100).toFixed(0)}%
+                    </span>
+                    <div className="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <span className="material-symbols-outlined text-white text-[20px]">zoom_in</span>
+                    </div>
+                  </div>
+                  <div className="p-1.5 flex flex-col">
+                    <span className="font-bold text-[11px] text-text-primary truncate">
+                      {inc.title || 'Incident'}
+                    </span>
+                    <span className="font-mono text-[10px] text-text-muted">
+                      {inc.timeStr}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="p-3.5 rounded-lg bg-surface-container-low border border-dashed border-surface-border flex items-center justify-between text-xs text-text-muted">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-text-muted text-[18px]">photo_camera</span>
+              <span>No snapshots captured yet. High-risk moments will automatically appear here.</span>
+            </div>
+            <button
+              onClick={() => {
+                const btn = document.querySelector('[title="Capture Instant Evidence Snapshot"]')
+                if (btn) btn.click()
+              }}
+              className="px-2.5 py-1 rounded bg-surface-container-high hover:bg-surface-container-highest text-primary font-mono text-[11px] font-semibold border border-surface-border/60 transition-colors"
+            >
+              Take Snapshot Now
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* 3. Privacy Assurance Footer */}
       <div className="flex items-center gap-space-sm px-space-md py-2.5 rounded-lg bg-surface-container-low border border-surface-border/60 text-text-muted">
         <span className="material-symbols-outlined text-primary text-[18px] shrink-0">
@@ -1608,6 +1688,84 @@ export function VideoPanel({
           </div>
         </div>
       </div>
+
+      {/* Snapshot Preview Interactive Modal */}
+      {previewIncident && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150"
+          onClick={() => setPreviewIncident(null)}
+        >
+          <div
+            className="bg-surface-card border border-surface-border rounded-2xl max-w-3xl w-full p-5 shadow-2xl text-slate-200 space-y-3.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-surface-border/60">
+              <div>
+                <h4 className="font-bold text-white text-base flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-status-high animate-pulse"></span>
+                  <span>{previewIncident.title || 'Evidence Snapshot'}</span>
+                </h4>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Captured at <strong className="text-white font-mono">{previewIncident.timeStr}</strong> · Peak Risk Score:{' '}
+                  <strong className="text-status-high font-mono">
+                    {((previewIncident.riskScore || 0.84) * 100).toFixed(0)}%
+                  </strong>
+                </p>
+              </div>
+              <button
+                onClick={() => setPreviewIncident(null)}
+                className="text-text-muted hover:text-white p-1.5 rounded-lg hover:bg-surface-container-high transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="rounded-xl overflow-hidden border border-surface-border bg-black aspect-video flex items-center justify-center shadow-inner relative group">
+              {getSnapshotUrl(previewIncident) ? (
+                <img
+                  src={getSnapshotUrl(previewIncident)}
+                  alt="Incident snapshot evidence"
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-text-muted">
+                  <span className="material-symbols-outlined text-[36px]">broken_image</span>
+                  <span className="text-xs font-mono">No image payload attached</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <div className="text-[11px] font-mono text-text-muted truncate max-w-md">
+                Reason: {previewIncident.primaryReason || 'Observable safety condition breach'}
+              </div>
+              <div className="flex items-center gap-2">
+                {getSnapshotUrl(previewIncident) && (
+                  <button
+                    onClick={() => {
+                      const url = getSnapshotUrl(previewIncident)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `snapshot-${previewIncident.id || Date.now()}.jpg`
+                      a.click()
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-semibold flex items-center gap-1.5 shadow-sm hover:opacity-90 transition-opacity"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">download</span>
+                    <span>Download Frame</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setPreviewIncident(null)}
+                  className="px-3 py-1.5 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-white text-xs font-semibold transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -427,6 +427,7 @@ function App() {
                   effectiveRiskLevel={effectiveRiskLevel}
                   onCaptureSnapshot={handleCaptureSnapshot}
                   sendFrame={sendFrame}
+                  incidents={incidents}
                 />
               </div>
 
