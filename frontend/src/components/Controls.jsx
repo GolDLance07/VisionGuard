@@ -29,7 +29,8 @@ export function Controls({
     formData.append('file', file)
 
     try {
-      const res = await fetch('/api/session/upload', {
+      const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
+      const res = await fetch(`${API_BASE}/api/session/upload`, {
         method: 'POST',
         body: formData,
       })

@@ -84,8 +84,11 @@ class VideoStreamManager:
 
         if not cap.isOpened():
             target_str = f"index {session.source.device_index}" if session.source.type == "webcam" else session.source.file_path
+            error_hint = ""
+            if session.source.type == "webcam":
+                error_hint = " - No camera found. Cloud servers (like Render) have no attached webcam; use 'Upload Video' mode or run locally."
             raise RuntimeError(
-                f"Failed to open video source: {session.source.type} ({target_str})"
+                f"Failed to open video source: {session.source.type} ({target_str}){error_hint}"
             )
         return cap
 
