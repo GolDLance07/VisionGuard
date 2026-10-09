@@ -125,13 +125,23 @@ class VideoStreamManager:
         while session.running:
             ret, frame = session.cap.read()
             if not ret:
-                if is_upload:
-                    # Smoothly loop uploaded video for continuous safety analysis
+                if is_upload and hasattr(session, "_cached_static_frame"):
+                    frame = session._cached_static_frame.copy()
+                    ret = True
+                elif is_upload:
+                    # Smoothly loop uploaded video or cache static image for continuous safety analysis
                     session.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     ret, frame = session.cap.read()
+                    if not ret and hasattr(session, "_last_frame"):
+                        frame = session._last_frame.copy()
+                        session._cached_static_frame = frame
+                        ret = True
                 if not ret:
                     logger.info(f"Session {session.id}: end of stream or read failure")
                     break
+
+            if ret and is_upload:
+                session._last_frame = frame
 
             session.frame_count += 1
 

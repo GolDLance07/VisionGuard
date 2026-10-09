@@ -12,8 +12,9 @@ import { SafetyTelemetryView } from './components/SafetyTelemetryView'
 import { SettingsModal } from './components/SettingsModal'
 import { SettingsView } from './components/SettingsView'
 import { useDetectionWebSocket } from './hooks/useDetectionWebSocket'
+import { getApiBase } from './config'
 
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
+const API_BASE = getApiBase()
 
 function App() {
   const COOLDOWN_MS = 4000;

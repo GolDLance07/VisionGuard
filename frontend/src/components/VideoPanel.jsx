@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import JSZip from 'jszip'
+import { getApiBase } from '../config'
 
 export function VideoPanel({
   frame,
@@ -361,7 +362,7 @@ export function VideoPanel({
     const formData = new FormData()
     formData.append('file', file)
     try {
-      const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
+      const apiBase = getApiBase()
       const res = await fetch(`${apiBase}/api/session/upload`, {
         method: 'POST',
         body: formData,
@@ -709,9 +710,15 @@ export function VideoPanel({
             </div>
           ) : (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-container-low/85 backdrop-blur-md border border-surface-border/60">
-              <span className="w-2 h-2 rounded-full bg-status-low animate-pulse"></span>
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  sessionId && !frame ? 'bg-amber-400 animate-ping' : 'bg-status-low animate-pulse'
+                }`}
+              ></span>
               <span className="font-mono text-[11px] text-text-primary font-semibold">
-                SURVEILLANCE ACTIVE · PERIMETER SECURE
+                {sessionId && !frame
+                  ? 'CONNECTING TO AI PIPELINE (RENDER CLOUD)...'
+                  : 'SURVEILLANCE ACTIVE · PERIMETER SECURE'}
               </span>
             </div>
           )}
@@ -1185,8 +1192,8 @@ export function VideoPanel({
           </svg>
         </div>
 
-        {/* Center Standby Message */}
-        {!frame?.frame && (
+        {/* Center Standby Message (only shown when no video or webcam feed is running) */}
+        {!webcamActive && !frame?.frame && (
           <div className="relative z-10 flex flex-col items-center justify-center p-8 text-center my-auto">
             {errorMessage ? (
               <div className="max-w-md p-4 bg-error-container/40 border border-error/50 rounded-xl text-text-primary backdrop-blur-md">
@@ -1207,7 +1214,7 @@ export function VideoPanel({
                 </div>
                 <div className="text-[11px] text-text-muted font-mono">
                   {sessionId
-                    ? 'Initializing YOLOv8 inference & tracking engine'
+                    ? 'Initializing YOLOv8 inference & tracking engine (cloud server may take ~15-25s to wake up on first start)'
                     : 'Select a video source or click "Start Webcam" to begin'}
                 </div>
               </div>
@@ -1345,11 +1352,11 @@ export function VideoPanel({
                 <span>{isStarting ? 'Starting...' : 'Start Webcam'}</span>
               </button>
 
-              {/* Upload Video Button */}
+              {/* Upload Video/Image Button */}
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="video/*,.mp4,.avi,.mov,.mkv,.webm,.m4v"
+                accept="video/*,image/*,.mp4,.avi,.mov,.mkv,.webm,.m4v,.jpg,.jpeg,.png,.webp,.bmp"
                 onChange={handleFileUpload}
                 className="hidden"
               />
@@ -1366,8 +1373,8 @@ export function VideoPanel({
                   {uploading
                     ? 'Uploading...'
                     : uploadedFilename
-                      ? `Video: ${uploadedFilename}`
-                      : 'Upload Video'}
+                      ? `File: ${uploadedFilename}`
+                      : 'Upload Media'}
                 </span>
               </button>
               {fileRef && (

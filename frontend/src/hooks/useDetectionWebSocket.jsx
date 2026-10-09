@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { getWsBase } from '../config'
 
 export function useDetectionWebSocket(sessionId) {
   const [latestFrame, setLatestFrame] = useState(null)
@@ -31,16 +32,9 @@ export function useDetectionWebSocket(sessionId) {
     setConnectionStatus('connecting')
     setErrorMessage(null)
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const customWsBase = import.meta.env.VITE_WS_URL
-    let wsUrl
-    if (customWsBase) {
-      const base = customWsBase.replace(/\/+$/, '')
-      const path = base.endsWith('/ws') ? '/detection' : '/ws/detection'
-      wsUrl = `${base}${path}?session_id=${encodeURIComponent(sessionId)}`
-    } else {
-      wsUrl = `${protocol}//${window.location.host}/ws/detection?session_id=${encodeURIComponent(sessionId)}`
-    }
+    const base = getWsBase().replace(/\/+$/, '')
+    const path = base.endsWith('/ws') ? '/detection' : '/ws/detection'
+    const wsUrl = `${base}${path}?session_id=${encodeURIComponent(sessionId)}`
     
     let ws
     try {

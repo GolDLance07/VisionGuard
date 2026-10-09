@@ -51,7 +51,13 @@ app.mount("/api/snapshots", StaticFiles(directory=snapshots_dir), name="snapshot
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "https://vision-guard-2thugeyub-me-abb2.vercel.app",
+    ],
+    allow_origin_regex=r"https://.*\.vercel\.app.*|https://.*\.onrender\.com.*|http://localhost:.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

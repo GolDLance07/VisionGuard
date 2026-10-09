@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { getApiBase } from '../config'
 
 export function Controls({
   source,
@@ -29,7 +30,7 @@ export function Controls({
     formData.append('file', file)
 
     try {
-      const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
+      const API_BASE = getApiBase()
       const res = await fetch(`${API_BASE}/api/session/upload`, {
         method: 'POST',
         body: formData,
@@ -116,7 +117,7 @@ export function Controls({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="video/mp4,video/avi,video/mov,video/x-matroska,video/webm"
+                accept="video/mp4,video/avi,video/mov,video/x-matroska,video/webm,image/*"
                 onChange={handleFileUpload}
                 className="hidden"
               />

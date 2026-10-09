@@ -19,7 +19,10 @@ UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-ALLOWED_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
+ALLOWED_EXTENSIONS = {
+    ".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v",
+    ".jpg", ".jpeg", ".png", ".webp", ".bmp",
+}
 ALLOWED_MIME_TYPES = {
     "video/mp4",
     "video/avi",
@@ -28,6 +31,10 @@ ALLOWED_MIME_TYPES = {
     "video/quicktime",
     "video/x-matroska",
     "video/webm",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/bmp",
     "application/octet-stream",  # Windows browser fallback
 }
 
