@@ -411,12 +411,14 @@ export function VideoPanel({
   const isHighRisk = effectiveRiskLevel === 'HIGH'
   const isMedRisk = effectiveRiskLevel === 'MEDIUM'
 
-  const people = frame?.objects?.filter((o) => o.class_name === 'person') || []
+  const people = frame?.objects?.filter((o) => o && o.bbox && o.class_name === 'person') || []
   const unsafeObjects =
     frame?.objects?.filter(
       (o) =>
-        unsafeClasses.includes(o.class_name) ||
-        ['knife', 'scissors', 'gun', 'weapon', 'baseball bat'].includes(o.class_name)
+        o &&
+        o.bbox &&
+        (unsafeClasses.includes(o.class_name) ||
+          ['knife', 'scissors', 'gun', 'weapon', 'baseball bat'].includes(o.class_name))
     ) || []
 
   // Classification helpers for Sharp vs Blunt Objects
@@ -979,8 +981,9 @@ export function VideoPanel({
             })}
 
             {/* Concentric Circle Trackers on Top of Person or Object */}
-            {frame?.objects?.map((obj) => {
-              const isPerson = obj.class_name.toLowerCase() === 'person'
+            {frame?.objects?.map((obj, idx) => {
+              if (!obj || !obj.bbox) return null
+              const isPerson = (obj.class_name || '').toLowerCase() === 'person'
               const isUnsafe =
                 unsafeClasses.includes(obj.class_name) ||
                 ['knife', 'scissors', 'gun', 'weapon', 'baseball bat', 'bat', 'crowbar', 'blade'].includes(obj.class_name)
@@ -1041,7 +1044,8 @@ export function VideoPanel({
 
               const idStr = obj.track_id != null ? `#${obj.track_id}` : (obj.track_status === 'untracked' || obj.id == null ? 'UNTRACKED' : `#${obj.id}`)
 
-              // Badg              let labelText = ''
+              // Badge label text
+              let labelText = ''
               if (isPerson) {
                 if (roleType === 'red') {
                   const ptVector = pointingThreatVectors.find((v) => v.fromPerson.id === obj.id)
