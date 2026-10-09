@@ -10,46 +10,56 @@ from app.schemas.detection import DetectedObject, BoundingBox, get_hazard_catego
 
 import torch
 
+from pathlib import Path
+
 _GLOBAL_MODEL = None
-_GLOBAL_POSE_MODEL = None
-_GLOBAL_WEAPON_MODEL = None
 
 
 def get_shared_models(config):
-    """Singleton model cache: loads neural network weights only once to prevent RAM duplication."""
-    global _GLOBAL_MODEL, _GLOBAL_POSE_MODEL, _GLOBAL_WEAPON_MODEL
+    """
+    Singleton model cache: loads YOLO weights deterministically from refactor models.
+    Per refactor audit, resolves paths deterministically and removes unused pose/weapon models.
+    """
+    global _GLOBAL_MODEL
 
     if _GLOBAL_MODEL is None:
+        backend_dir = Path(__file__).resolve().parent.parent.parent
+        repo_root = backend_dir.parent
+        refactor_dir = repo_root / "refactor"
+        models_dir = backend_dir / "models"
+
         is_cloud = bool(os.environ.get("RENDER") or os.environ.get("PORT") or os.environ.get("LOW_MEMORY"))
-        # In cloud instances with strict 512MB RAM limits (Render Free), use yolov8n (3.2M params)
         if is_cloud:
             try:
                 torch.set_num_threads(1)
             except Exception:
                 pass
-            model_path = "models/yolov8n.pt" if os.path.exists("models/yolov8n.pt") else "yolov8n.pt"
-        elif model_path in ("models/yolov8n.pt", "yolov8n.pt") and os.path.exists("models/yolov8s.pt"):
-            model_path = "models/yolov8s.pt"
 
-        _GLOBAL_MODEL = YOLO(model_path)
+        # Determine target model: use yolov8n in cloud/low-memory, otherwise yolov8s
+        target_name = "yolov8n.pt" if is_cloud else "yolov8s.pt"
 
-    if _GLOBAL_POSE_MODEL is None:
-        pose_path = "models/yolov8n-pose.pt" if os.path.exists("models/yolov8n-pose.pt") else "yolov8n-pose.pt"
-        try:
-            _GLOBAL_POSE_MODEL = YOLO(pose_path)
-        except Exception:
-            _GLOBAL_POSE_MODEL = None
+        # Search candidates prioritizing the refactor directory
+        candidates = [
+            refactor_dir / target_name,
+            refactor_dir / f"{target_name}.zip",
+            models_dir / target_name,
+            refactor_dir / "yolov8n.pt",
+            refactor_dir / "yolov8n.pt.zip",
+            models_dir / "yolov8n.pt",
+        ]
 
-    if _GLOBAL_WEAPON_MODEL is None:
-        for wp in ("models/weapon_yolo.pt", "backend/models/weapon_yolo.pt", "experiments/runs/weapon_v1/weights/best.pt"):
-            if os.path.exists(wp):
-                try:
-                    _GLOBAL_WEAPON_MODEL = YOLO(wp)
-                    break
-                except Exception:
-                    pass
+        resolved_path = None
+        for candidate in candidates:
+            if candidate.exists():
+                resolved_path = str(candidate)
+                break
 
-    return _GLOBAL_MODEL, _GLOBAL_POSE_MODEL, _GLOBAL_WEAPON_MODEL
+        if not resolved_path:
+            resolved_path = target_name
+
+        _GLOBAL_MODEL = YOLO(resolved_path)
+
+    return _GLOBAL_MODEL, None, None
 
 
 class Tracker:

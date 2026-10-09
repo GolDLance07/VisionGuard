@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react'
+import { getApiBase } from '../config'
 
 export function ThresholdTuningCard({ config, onConfigSaved }) {
-  const [conf, setConf] = useState(0.50)
-  const [speed, setSpeed] = useState(400)
-  const [dist, setDist] = useState(150)
-  const [persist, setPersist] = useState(1.0)
+  const [conf, setConf] = useState(0.25)
+  const [speed, setSpeed] = useState(100)
+  const [dist, setDist] = useState(100)
+  const [persist, setPersist] = useState(0.5)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (config) {
       if (config.detection_confidence_threshold !== undefined) setConf(config.detection_confidence_threshold)
-      if (config.speed_thresholds?.rapid !== undefined) setSpeed(config.speed_thresholds.rapid)
+      if (config.speed_thresholds?.fast !== undefined) setSpeed(config.speed_thresholds.fast)
+      else if (config.speed_thresholds?.rapid !== undefined) setSpeed(config.speed_thresholds.rapid)
       if (config.proximity_thresholds?.close !== undefined) setDist(config.proximity_thresholds.close)
       if (config.min_persistence_duration !== undefined) setPersist(config.min_persistence_duration)
     }
@@ -22,9 +24,9 @@ export function ThresholdTuningCard({ config, onConfigSaved }) {
       const payload = {
         detection_confidence_threshold: updates.conf !== undefined ? updates.conf : conf,
         speed_thresholds: {
-          stationary: 10,
-          normal: 100,
-          rapid: updates.speed !== undefined ? updates.speed : speed,
+          slow: 10,
+          medium: 50,
+          fast: updates.speed !== undefined ? updates.speed : speed,
         },
         proximity_thresholds: {
           close: updates.dist !== undefined ? updates.dist : dist,
@@ -34,7 +36,7 @@ export function ThresholdTuningCard({ config, onConfigSaved }) {
         min_persistence_duration: updates.persist !== undefined ? updates.persist : persist,
       }
 
-      const res = await fetch('/api/config', {
+      const res = await fetch(`${getApiBase()}/api/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

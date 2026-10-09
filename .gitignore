@@ -31,6 +31,7 @@ dist/
 data/
 uploads/
 backend/uploads/
+refactor/*.zip
 
 # Environment & OS files
 .env

@@ -232,7 +232,7 @@ async def update_incident_status(incident_id: str, payload: dict):
         raise HTTPException(400, "status required")
 
     try:
-        session = SessionLocal()
+        session = get_session()
         try:
             record = session.query(IncidentRecordModel).filter_by(id=incident_id).first()
             if record:
@@ -253,7 +253,7 @@ async def update_incident_status(incident_id: str, payload: dict):
 @router.delete("/incidents")
 async def clear_incidents():
     try:
-        session = SessionLocal()
+        session = get_session()
         try:
             session.query(IncidentRecordModel).delete()
             session.commit()

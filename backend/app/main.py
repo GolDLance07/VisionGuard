@@ -64,7 +64,6 @@ app.add_middleware(
 )
 
 app.include_router(routes.router, prefix="/api")
-app.include_router(routes.router)
 app.include_router(websocket.router)
 
 

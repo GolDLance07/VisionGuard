@@ -77,3 +77,35 @@ def test_incidents_api():
     incidents = res.json()["incidents"]
     assert len(incidents) >= 1
     assert any(inc["title"] == "Weapon Brandished Incident" for inc in incidents)
+
+
+def test_incident_status_and_clear():
+    # 1. Post an incident
+    payload = {
+        "riskScore": 0.90,
+        "riskLevel": "HIGH",
+        "title": "Status Test Incident",
+        "primaryReason": "Proximity alert",
+    }
+    post_res = client.post("/api/incidents", json=payload)
+    assert post_res.status_code == 200
+    inc_id = post_res.json()["incident"]["id"]
+
+    # 2. PATCH status (verifies SessionLocal bugfix)
+    patch_res = client.patch(f"/api/incidents/{inc_id}/status", json={"status": "resolved"})
+    assert patch_res.status_code == 200
+    assert patch_res.json()["status"] == "updated"
+    assert patch_res.json()["newStatus"] == "resolved"
+
+    # 3. DELETE /api/incidents (verifies SessionLocal bugfix)
+    del_res = client.delete("/api/incidents")
+    assert del_res.status_code == 200
+    assert del_res.json()["status"] == "cleared"
+
+
+def test_tracker_model_resolution():
+    from app.detection.tracker import Tracker
+    # Initialize tracker in local (non-cloud) environment - verifies UnboundLocalError bugfix
+    tracker = Tracker()
+    assert tracker.model is not None
+
