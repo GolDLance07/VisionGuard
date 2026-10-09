@@ -495,13 +495,13 @@ export function VideoPanel({
     const pA_cx = (pA.bbox.x1 + pA.bbox.x2) / 2
     const pA_cy = (pA.bbox.y1 + pA.bbox.y2) / 2
 
-    // Check fast movement while armed
-    if (isArmed && pSpeed > 25) {
+    // Check fast movement while armed (threshold 100 px/s per patch notes)
+    if (isArmed && pSpeed > 100) {
       redThreatPersonIds.add(pA.id)
       heldList.forEach((w) => redThreatWeaponIds.add(w.id))
     }
-    // High-speed sudden charge/rush
-    if (pSpeed > 55) {
+    // High-speed sudden charge/rush (threshold 150 px/s per patch notes)
+    if (pSpeed > 150) {
       redThreatPersonIds.add(pA.id)
     }
     if (effectiveRiskLevel === 'HIGH' && isArmed) {
@@ -1041,23 +1041,22 @@ export function VideoPanel({
 
               const idStr = obj.track_id != null ? `#${obj.track_id}` : (obj.track_status === 'untracked' || obj.id == null ? 'UNTRACKED' : `#${obj.id}`)
 
-              // Badge Label text
-              let labelText = ''
+              // Badg              let labelText = ''
               if (isPerson) {
                 if (roleType === 'red') {
                   const ptVector = pointingThreatVectors.find((v) => v.fromPerson.id === obj.id)
                   if (ptVector) {
                     const toId = ptVector.toPerson.track_id != null ? `#${ptVector.toPerson.track_id}` : (ptVector.toPerson.track_status === 'untracked' || ptVector.toPerson.id == null ? 'UNTRACKED' : `#${ptVector.toPerson.id}`)
                     labelText = `⚠ PERSON ${idStr} · ${ptVector.reason} PERSON ${toId}`
-                  } else if (obj.speed && obj.speed > 25) {
+                  } else if (obj.speed && obj.speed > 100) {
                     labelText = `⚠ PERSON ${idStr} · RAPID MOVEMENT (${obj.speed.toFixed(0)}px/s)`
                   } else {
                     labelText = `⚠ PERSON ${idStr} · CRITICAL THREAT`
                   }
                 } else if (roleType === 'blunt') {
-                  labelText = `PERSON ${idStr} · HOLDING BLUNT OBJECT`
+                  labelText = `PERSON ${idStr} · POSSIBLE BLUNT OBJECT ASSOCIATION`
                 } else if (roleType === 'sharp') {
-                  labelText = `PERSON ${idStr} · HOLDING SHARP OBJECT`
+                  labelText = `PERSON ${idStr} · POSSIBLE SHARP OBJECT ASSOCIATION`
                 } else {
                   labelText = `PERSON ${idStr} · ${(obj.confidence * 100).toFixed(0)}%`
                 }
@@ -1066,19 +1065,17 @@ export function VideoPanel({
                 if (roleType === 'red') {
                   labelText = `⚠ ${isSharpObj(obj) ? 'SHARP OBJECT' : isBluntObj(obj) ? 'BLUNT OBJECT' : 'WEAPON'} ${idStr} · POINTED/ACTIVE`
                 } else if (roleType === 'blunt') {
-                  labelText = `BLUNT OBJECT ${idStr}${isHeld ? ' · HELD' : ''} · ${(obj.confidence * 100).toFixed(0)}%`
+                  labelText = `BLUNT OBJECT ${idStr}${isHeld ? ' · NEAR PERSON' : ''} · ${(obj.confidence * 100).toFixed(0)}%`
                 } else if (roleType === 'sharp') {
-                  labelText = `SHARP OBJECT ${idStr}${isHeld ? ' · HELD' : ''} · ${(obj.confidence * 100).toFixed(0)}%`
+                  labelText = `SHARP OBJECT ${idStr}${isHeld ? ' · NEAR PERSON' : ''} · ${(obj.confidence * 100).toFixed(0)}%`
                 } else {
                   labelText = `${obj.class_name.toUpperCase()} ${idStr} · ${(obj.confidence * 100).toFixed(0)}%`
                 }
               }
 
-              const boxW = Math.max(x2 - x1, 4)
-              const boxH = Math.max(y2 - y1, 4)
-              const badgeWidth = Math.min(labelText.length * 6.5 + 16, Math.max(boxW, 160))
-              const badgeX = Math.max(x1, 4)
-              const badgeY = Math.max(y1 - 18, 4)
+              const badgeWidth = Math.min(labelText.length * 6.6 + 18, 230)
+              const badgeX = Math.max(cx - badgeWidth / 2, 4)
+              const badgeY = Math.max(top_y - 24, 4)
 
               // Outer ping animation speed matched to risk severity
               const pingDuration =
@@ -1086,63 +1083,23 @@ export function VideoPanel({
 
               return (
                 <g key={`detected-obj-${obj.track_id ?? obj.id ?? `untracked-${idx}`}`}>
-                  {/* Actual Bounding Box Rectangle */}
-                  <rect
-                    x={x1}
-                    y={y1}
-                    width={boxW}
-                    height={boxH}
-                    fill={color}
-                    fillOpacity={roleType === 'red' ? 0.15 : 0.05}
-                    stroke={color}
-                    strokeWidth={roleType === 'red' ? 2 : 1.5}
-                    strokeDasharray={obj.track_status === 'untracked' ? '4 3' : 'none'}
-                    rx="3"
-                  />
-
-                  {/* Corner Accent Brackets */}
-                  <path
-                    d={`M ${x1} ${Math.min(y1 + 10, y1 + boxH / 2)} L ${x1} ${y1} L ${Math.min(x1 + 10, x1 + boxW / 2)} ${y1}`}
-                    fill="none"
-                    stroke={color}
-                    strokeWidth="2.5"
-                  />
-                  <path
-                    d={`M ${Math.max(x2 - 10, x1 + boxW / 2)} ${y1} L ${x2} ${y1} L ${x2} ${Math.min(y1 + 10, y1 + boxH / 2)}`}
-                    fill="none"
-                    stroke={color}
-                    strokeWidth="2.5"
-                  />
-                  <path
-                    d={`M ${x1} ${Math.max(y2 - 10, y1 + boxH / 2)} L ${x1} ${y2} L ${Math.min(x1 + 10, x1 + boxW / 2)} ${y2}`}
-                    fill="none"
-                    stroke={color}
-                    strokeWidth="2.5"
-                  />
-                  <path
-                    d={`M ${Math.max(x2 - 10, x1 + boxW / 2)} ${y2} L ${x2} ${y2} L ${x2} ${Math.max(y2 - 10, y1 + boxH / 2)}`}
-                    fill="none"
-                    stroke={color}
-                    strokeWidth="2.5"
-                  />
-
-                  {/* Subtle vertical anchor guideline to object center */}
+                  {/* Subtle vertical anchor guideline to object */}
                   <line
                     x1={cx}
-                    y1={top_y}
+                    y1={top_y + 12}
                     x2={cx}
-                    y2={Math.min(y2, top_y + 16)}
+                    y2={Math.min(y2, top_y + (isPerson ? 40 : 18))}
                     stroke={color}
                     strokeWidth="1"
                     strokeDasharray="2 2"
                     strokeOpacity="0.35"
                   />
 
-                  {/* Concentric Circle: Outer Radar Ripple at Top Center */}
+                  {/* Concentric Circle 1: Outer Radar Ripple */}
                   <circle
                     cx={cx}
                     cy={top_y}
-                    r="12"
+                    r="15"
                     fill="none"
                     stroke={color}
                     strokeWidth="1.2"
@@ -1154,13 +1111,42 @@ export function VideoPanel({
                     }}
                   />
 
-                  {/* Inner Solid Target Dot */}
+                  {/* Concentric Circle 2: Outer Ring */}
+                  <circle
+                    cx={cx}
+                    cy={top_y}
+                    r="11"
+                    fill="none"
+                    stroke={color}
+                    strokeWidth="1.6"
+                    strokeDasharray={roleType !== 'normal' ? '3 2' : 'none'}
+                    className={roleType === 'red' ? 'animate-pulse' : ''}
+                  />
+
+                  {/* Concentric Circle 3: Middle Ring */}
+                  <circle
+                    cx={cx}
+                    cy={top_y}
+                    r="6"
+                    fill={color}
+                    fillOpacity="0.22"
+                    stroke={color}
+                    strokeWidth="1.8"
+                  />
+
+                  {/* Concentric Circle 4: Inner Solid Target Dot */}
                   <circle
                     cx={cx}
                     cy={top_y}
                     r="2.5"
                     fill={color}
                   />
+
+                  {/* Crosshair Reticle Ticks */}
+                  <line x1={cx - 15} y1={top_y} x2={cx - 11} y2={top_y} stroke={color} strokeWidth="1.5" />
+                  <line x1={cx + 11} y1={top_y} x2={cx + 15} y2={top_y} stroke={color} strokeWidth="1.5" />
+                  <line x1={cx} y1={top_y - 15} x2={cx} y2={top_y - 11} stroke={color} strokeWidth="1.5" />
+                  <line x1={cx} y1={top_y + 11} x2={cx} y2={top_y + 15} stroke={color} strokeWidth="1.5" />
 
                   {/* Motion Velocity Vector */}
                   {hasMotion && (
@@ -1188,7 +1174,7 @@ export function VideoPanel({
                     x={badgeX}
                     y={badgeY}
                     width={badgeWidth}
-                    height="17"
+                    height="16"
                     rx="3"
                     fill="rgba(5, 15, 24, 0.94)"
                     stroke={color}
@@ -1196,12 +1182,13 @@ export function VideoPanel({
                     className="shadow-sm"
                   />
                   <text
-                    x={badgeX + 6}
-                    y={badgeY + 11.5}
+                    x={badgeX + badgeWidth / 2}
+                    y={badgeY + 11}
                     fill={color}
                     fontSize="8.5"
                     fontWeight="bold"
                     fontFamily="JetBrains Mono, monospace"
+                    textAnchor="middle"
                   >
                     {labelText}
                   </text>

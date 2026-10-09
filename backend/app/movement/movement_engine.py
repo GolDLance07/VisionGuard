@@ -32,12 +32,30 @@ class MovementState:
     def get_velocity(self) -> tuple[float, float]:
         if len(self.positions) < 2:
             return (0.0, 0.0)
-        dt = self.timestamps[-1] - self.timestamps[0]
-        if dt <= 0:
+
+        vxs: list[float] = []
+        vys: list[float] = []
+        for i in range(len(self.positions) - 1):
+            dt = self.timestamps[i + 1] - self.timestamps[i]
+            if dt > 0:
+                dx = self.positions[i + 1][0] - self.positions[i][0]
+                dy = self.positions[i + 1][1] - self.positions[i][1]
+                vxs.append(dx / dt)
+                vys.append(dy / dt)
+
+        if not vxs:
             return (0.0, 0.0)
-        dx = self.positions[-1][0] - self.positions[0][0]
-        dy = self.positions[-1][1] - self.positions[0][1]
-        return (dx / dt, dy / dt)
+
+        vx = float(np.median(vxs))
+        vy = float(np.median(vys))
+
+        # Size-relative deadband to filter one-frame detector/track micro-jitter
+        avg_h = float(np.mean(self.bbox_heights)) if self.bbox_heights else 100.0
+        deadband = 0.02 * avg_h
+        if np.hypot(vx, vy) < deadband:
+            return (0.0, 0.0)
+
+        return (vx, vy)
 
     def get_speed(self) -> float:
         vx, vy = self.get_velocity()
