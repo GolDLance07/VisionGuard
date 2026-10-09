@@ -151,6 +151,9 @@ export function VideoPanel({
             ) {
               ctx.drawImage(localVideoRef.current, 0, 0, 640, 480)
               const dataUrl = captureCanvasRef.current.toDataURL('image/jpeg', 0.6)
+              if (typeof window !== 'undefined') {
+                window.__lastWebcamFrame = dataUrl
+              }
               frameSeqRef.current += 1
               const sent = sendFrame(dataUrl, frameSeqRef.current)
               if (sent) {
@@ -653,18 +656,15 @@ export function VideoPanel({
               : 'border-surface-border'
           }`}
       >
-        {/* Optical Background scanlines when idle or waiting */}
-        {!frame?.frame && (
-          <div className="absolute inset-0 z-0">
-            <div
-              className="w-full h-full bg-cover bg-center opacity-60 filter contrast-125 brightness-75"
-              style={{
-                backgroundImage:
-                  "url('https://lh3.googleusercontent.com/aida-public/AB6AXuC_nudIOGZ5e1zXa5q-z9egu0Fszg8ewsJ_i3dqoikyj5zqJazSDZYXZRJ9pSZjkDMk4RDv1wbBar_jGhHFl59HCIfeaKelmgHVeB8fbDrtV5mlTDf2SY4QQgolGokYSBsCKsl35JbPhn3QhKcrdZos74SWdQ23yjW-S7TUcWwX5mjY59409L2KsXDW0Myd708XTJvV4ZylDZB9Jx-XNRKult8E9c4NoMl2fY_A4gjcMB4R-OXJd8kf')",
-              }}
-            ></div>
-            <div className="absolute inset-0 bg-gradient-to-t from-surface-container-lowest via-transparent to-surface-container-lowest/80 pointer-events-none"></div>
+        {/* Tactical grid canvas when stream is inactive */}
+        {!(source === 'webcam' && webcamActive) && !(source !== 'webcam' && frame?.frame) && (
+          <div className="absolute inset-0 z-0 flex flex-col items-center justify-center bg-surface-container-lowest">
             <div className="absolute inset-0 bg-[radial-gradient(#2dd4bf_1px,transparent_1px)] [background-size:24px_24px] opacity-10 pointer-events-none"></div>
+            <div className="relative z-10 flex flex-col items-center text-center p-6 max-w-sm">
+              <span className="material-symbols-outlined text-4xl text-text-muted/60 mb-2">videocam</span>
+              <p className="font-mono text-xs font-bold text-text-primary uppercase tracking-wider">Optical Feed Inactive</p>
+              <p className="font-sans text-[11px] text-text-muted mt-1">Start webcam above to monitor live feed and capture genuine snapshots.</p>
+            </div>
           </div>
         )}
 
@@ -1460,6 +1460,8 @@ export function VideoPanel({
             title="Capture Instant Evidence Snapshot"
             onClick={() => {
               let frameToCapture = null
+
+              // 1. Live Browser Webcam direct high-res capture
               if (localVideoRef.current && localVideoRef.current.readyState >= 2) {
                 try {
                   const video = localVideoRef.current
@@ -1468,13 +1470,27 @@ export function VideoPanel({
                   canvas.height = video.videoHeight || 480
                   const ctx = canvas.getContext('2d')
                   ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-                  frameToCapture = canvas.toDataURL('image/jpeg', 0.85).split(',')[1]
+                  frameToCapture = canvas.toDataURL('image/jpeg', 0.85)
                 } catch (e) {
                   console.debug('Webcam canvas snapshot error:', e)
                 }
               }
+
+              // 2. Offscreen webcam canvas backup
+              if (!frameToCapture && captureCanvasRef.current) {
+                try {
+                  frameToCapture = captureCanvasRef.current.toDataURL('image/jpeg', 0.85)
+                } catch (e) {}
+              }
+
+              // 3. Fallback to cached active webcam stream frame
+              if (!frameToCapture && typeof window !== 'undefined' && window.__lastWebcamFrame) {
+                frameToCapture = window.__lastWebcamFrame
+              }
+
+              // 4. Server stream frame fallback
               if (!frameToCapture && frame?.frame) {
-                frameToCapture = frame.frame.startsWith('data:') ? frame.frame.split(',')[1] : frame.frame
+                frameToCapture = frame.frame.startsWith('data:') ? frame.frame : `data:image/jpeg;base64,${frame.frame}`
               }
 
               setShutterFlash(true)

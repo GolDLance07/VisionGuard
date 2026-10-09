@@ -118,6 +118,14 @@ function App() {
 
     const incidentId = `inc-hr-${Date.now().toString().slice(-6)}-${nextIncidentIdRef.current++}`;
 
+    const liveFrame =
+      (typeof window !== 'undefined' ? window.__lastWebcamFrame : null) ||
+      (latestFrame.frame
+        ? latestFrame.frame.startsWith('data:')
+          ? latestFrame.frame
+          : `data:image/jpeg;base64,${latestFrame.frame}`
+        : null);
+
     const newIncident = {
       id: incidentId,
       hazardClass,
@@ -135,7 +143,8 @@ function App() {
       title,
       primaryReason,
       reasons: latestFrame.reasons || [],
-      frame: latestFrame.frame || null,
+      frame: liveFrame,
+      imageUrl: liveFrame,
       detectedClasses,
     };
 
@@ -220,7 +229,15 @@ function App() {
         (config?.unsafe_classes || ['knife', 'scissors', 'gun']).includes(o.class_name)
       ) || []
 
-    const frameData = capturedFrame || latestFrame?.frame || null
+    const frameData =
+      capturedFrame ||
+      (typeof window !== 'undefined' ? window.__lastWebcamFrame : null) ||
+      (latestFrame?.frame
+        ? latestFrame.frame.startsWith('data:')
+          ? latestFrame.frame
+          : `data:image/jpeg;base64,${latestFrame.frame}`
+        : null)
+
     const incidentId = `inc-manual-${now.toString().slice(-6)}`
 
     const newIncident = {
@@ -229,12 +246,13 @@ function App() {
       timeStr,
       riskScore: latestFrame?.risk_score ?? 0.84,
       riskLevel: latestFrame?.risk_level ?? 'HIGH',
-      title: 'Manual Operator Evidence Snapshot',
-      primaryReason: 'Manual operator visual capture during active monitoring session',
+      title: 'Live Webcam Snapshot',
+      primaryReason: 'Live webcam keyframe captured during active monitoring session',
       reasons: latestFrame?.reasons?.length
         ? latestFrame.reasons
-        : [{ details: 'Manual keyframe captured for forensic retention', rule: 'manual_capture' }],
+        : [{ details: 'Direct live webcam snapshot captured by operator', rule: 'manual_capture' }],
       frame: frameData,
+      imageUrl: frameData,
       detectedClasses: unsafe.map((o) => `${o.class_name} (${(o.confidence * 100).toFixed(0)}%)`),
     }
 

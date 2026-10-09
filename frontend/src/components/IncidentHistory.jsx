@@ -13,155 +13,33 @@ export function IncidentHistory({ incidents = [], onClear }) {
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
 
-  // If no incidents captured yet, populate with realistic audit trail seed items
-  const seedIncidents = [
-    {
-      id: 'inc-894',
-      eventId: '#894',
-      timestamp: Date.now() - 45000,
-      timeStr: '14:32:08',
-      source: 'CAM-01 (Fabrication)',
-      riskScore: 0.84,
-      riskLevel: 'HIGH',
-      title: 'Sharp Object Proximity Escalation',
-      rule: 'Rule R-402',
-      ruleDesc: 'Unsafe Object Proximity',
-      duration: '1.3s',
-      status: 'Requires Review',
-      reasons: [
-        {
-          title: 'Unsafe object classified: knife',
-          metric: '91% Conf',
-          details: 'Object: "knife" · Bounding Box [O-441] in CAM-01',
-        },
-        {
-          title: 'Rapid kinematic speed vector',
-          metric: '620 px/s',
-          details: 'Threshold: 400 px/s · Relative acceleration +34%',
-        },
-        {
-          title: 'Proximity vector closing rapidly',
-          metric: '68 px dist',
-          details: 'Inter-entity boundary to Person #2 (Safety threshold: 150 px)',
-        },
-        {
-          title: 'Persistence temporal window met',
-          metric: '1.3s sustained',
-          details: 'Passed minimum dampening filter (1.0s requirement)',
-        },
-      ],
-      detectedClasses: ['knife (91%)'],
-      frame: null,
-    },
-    {
-      id: 'inc-893',
-      eventId: '#893',
-      timestamp: Date.now() - 360000,
-      timeStr: '13:15:22',
-      source: 'CAM-01 (Fabrication)',
-      riskScore: 0.68,
-      riskLevel: 'MEDIUM',
-      title: 'Rapid Kinematic Approach',
-      rule: 'Rule R-301',
-      ruleDesc: 'Rapid Kinematic Approach',
-      duration: '0.8s',
-      status: 'Ack by Op #04',
-      reasons: [
-        {
-          title: 'High-speed closure detected',
-          metric: '440 px/s',
-          details: 'Velocity vector towards workstation edge exceeds 400 px/s threshold',
-        },
-        {
-          title: 'Transient safety boundary overlap',
-          metric: '120 px',
-          details: 'Person #1 and Person #2 within mutual proximity zone',
-        },
-      ],
-      detectedClasses: [],
-      frame: null,
-    },
-    {
-      id: 'inc-891',
-      eventId: '#891',
-      timestamp: Date.now() - 1200000,
-      timeStr: '12:44:03',
-      source: 'CAM-02 (Assembly)',
-      riskScore: 0.78,
-      riskLevel: 'HIGH',
-      title: 'Sharp Tool Vector Warning',
-      rule: 'Rule R-402',
-      ruleDesc: 'Sharp Tool Vector',
-      duration: '2.4s',
-      status: 'Ack by Op #02',
-      reasons: [
-        {
-          title: 'Tool classification: scissors / shears',
-          metric: '88% Conf',
-          details: 'Hazard category: Sharp Object in proximity to operator',
-        },
-        {
-          title: 'Sustained presence in buffer zone',
-          metric: '2.4s',
-          details: 'Extended presence past 1.0s minimum window',
-        },
-      ],
-      detectedClasses: ['scissors (88%)'],
-      frame: null,
-    },
-    {
-      id: 'inc-888',
-      eventId: '#888',
-      timestamp: Date.now() - 3600000,
-      timeStr: '11:02:49',
-      source: 'CAM-01 (Fabrication)',
-      riskScore: 0.54,
-      riskLevel: 'MEDIUM',
-      title: 'Restricted Zone Intrusion',
-      rule: 'Rule R-104',
-      ruleDesc: 'Restricted Zone Intrusion',
-      duration: '1.1s',
-      status: 'Dismissed · Prop',
-      reasons: [
-        {
-          title: 'Safety zone line traversed',
-          metric: 'Boundary Breach',
-          details: 'Operator crossed physical perimeter boundary line',
-        },
-      ],
-      detectedClasses: [],
-      frame: null,
-    },
-  ]
-
-  // Combine live captured incidents with seed items
-  const allIncidents = [
-    ...incidents.map((inc, i) => ({
-      id: inc.id,
-      eventId: `#${894 + incidents.length - i}`,
-      timestamp: inc.timestamp,
-      timeStr: inc.timeStr,
-      source: 'WORKSTATION-CAM-01',
-      riskScore: inc.riskScore,
-      riskLevel: inc.riskLevel || 'HIGH',
-      title: inc.title || 'Safety Risk Threshold Exceeded',
-      rule: inc.reasons?.[0]?.rule ? `Rule ${inc.reasons[0].rule.toUpperCase()}` : 'Rule R-402',
-      ruleDesc: inc.primaryReason || 'Unsafe Object Proximity Escalation',
-      duration: '1.3s',
-      status: statusMap[inc.id] || 'Requires Review',
-      reasons: (inc.reasons?.length ? inc.reasons : [
-        { details: inc.primaryReason || 'Safety threshold boundary exceeded', rule: 'risk' }
-      ]).map((r) => ({
-        title: r.details || r.reason || 'Safety Rule Trigger',
-        metric: r.score ? `${(r.score * 100).toFixed(0)}% Score` : 'Critical',
-        details: r.details || 'Observable kinematic condition met',
-      })),
-      detectedClasses: inc.detectedClasses || [],
-      frame: inc.frame,
-      imageUrl: inc.imageUrl || inc.frame,
+  // Display authentic live-captured incidents from current session & backend storage
+  const allIncidents = incidents.map((inc, i) => ({
+    id: inc.id,
+    eventId: inc.id.startsWith('inc-manual-')
+      ? `#M-${inc.id.slice(-4)}`
+      : `#${inc.id.slice(-4)}`,
+    timestamp: inc.timestamp,
+    timeStr: inc.timeStr,
+    source: 'WORKSTATION-CAM-01',
+    riskScore: inc.riskScore ?? 0.84,
+    riskLevel: inc.riskLevel || 'HIGH',
+    title: inc.title || 'Safety Risk Threshold Exceeded',
+    rule: inc.reasons?.[0]?.rule ? `Rule ${inc.reasons[0].rule.toUpperCase()}` : 'Rule R-402',
+    ruleDesc: inc.primaryReason || 'Unsafe Object Proximity Escalation',
+    duration: '1.3s',
+    status: statusMap[inc.id] || 'Requires Review',
+    reasons: (inc.reasons?.length ? inc.reasons : [
+      { details: inc.primaryReason || 'Safety threshold boundary exceeded', rule: 'risk' }
+    ]).map((r) => ({
+      title: r.details || r.reason || 'Safety Rule Trigger',
+      metric: r.score ? `${(r.score * 100).toFixed(0)}% Score` : 'Critical',
+      details: r.details || 'Observable kinematic condition met',
     })),
-    ...seedIncidents,
-  ]
+    detectedClasses: inc.detectedClasses || [],
+    frame: inc.frame,
+    imageUrl: inc.imageUrl || inc.frame,
+  }))
 
   // Filtered list
   const filtered = allIncidents.filter((inc) => {
@@ -543,8 +421,21 @@ export function IncidentHistory({ incidents = [], onClear }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-border/40 font-sans text-xs text-text-primary">
-                {filtered.map((item) => {
-                  const isSelected = item.id === activeIncident?.id
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan="8" className="py-12 text-center text-text-muted">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <span className="material-symbols-outlined text-3xl text-text-muted/60">photo_camera</span>
+                        <span className="font-semibold text-text-primary text-xs">No Live Snapshots Recorded Yet</span>
+                        <span className="text-[11px] text-text-muted max-w-sm">
+                          Snapshots are captured directly from your live webcam when risks are detected or when you click "Snapshot" on the Live Monitor.
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((item) => {
+                    const isSelected = item.id === activeIncident?.id
                   const isHigh = item.riskLevel === 'HIGH' || item.riskLevel === 'high'
                   const currentStatus = statusMap[item.id] || item.status
 
@@ -616,7 +507,7 @@ export function IncidentHistory({ incidents = [], onClear }) {
                       </td>
                     </tr>
                   )
-                })}
+                }))}
               </tbody>
             </table>
           </div>
@@ -633,7 +524,7 @@ export function IncidentHistory({ incidents = [], onClear }) {
         </div>
 
         {/* Right Column: Event Detail Forensic Inspector (40% ~ 5 cols) */}
-        {activeIncident && (
+        {activeIncident ? (
           <div className="lg:col-span-5 flex flex-col gap-space-md">
             <div className="bg-surface-card rounded-xl border border-surface-border/80 p-space-md shadow-xl flex flex-col gap-space-md">
               {/* Inspector Header */}
@@ -882,6 +773,16 @@ export function IncidentHistory({ incidents = [], onClear }) {
               </div>
             </div>
           </div>
+        ) : (
+          <div className="lg:col-span-5 bg-surface-card rounded-xl border border-surface-border/80 p-8 flex flex-col items-center justify-center text-center shadow-sm">
+            <div className="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center mb-3 text-primary/70">
+              <span className="material-symbols-outlined text-2xl">photo_camera</span>
+            </div>
+            <h3 className="text-sm font-semibold text-text-primary">No Incident Selected</h3>
+            <p className="text-xs text-text-muted max-w-xs mt-1">
+              Start your webcam on the Live Monitor and click "Snapshot" or trigger a risk condition to record genuine camera evidence.
+            </p>
+          </div>
         )}
       </section>
 
@@ -911,15 +812,17 @@ export function IncidentHistory({ incidents = [], onClear }) {
               {getSnapshotUrl(activeIncident) ? (
                 <img
                   src={getSnapshotUrl(activeIncident)}
-                  alt="Full incident frame"
+                  alt="Live Webcam Evidence Frame"
                   className="w-full h-full object-contain"
                 />
               ) : (
-                <img
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuBVFujQOvuX0tGAK2S4ZXX8frv1MCV3c1AO1jOlh3ljXTWGcrshuz3LjxXxTlZCbv-npxDI2QoOJjrBE8MHFWCnsa2xe2-z2pNx2Yg7HgM-SU3-MiIW683w9LKV3cLO78VEvEqoNLtZIE_8Llemt5iggnOTNYcnI3GEJMBRrQIJ0ruz1UOamFh380RU8QPoi3XokdEHFmKLNA8Lo4hqvL8kjnKgclufrldDekbIGcaCvkd6-PwyPhoj"
-                  alt="Simulated Evidence Frame"
-                  className="w-full h-full object-contain"
-                />
+                <div className="flex flex-col items-center justify-center p-8 text-center text-text-muted">
+                  <span className="material-symbols-outlined text-4xl text-text-muted/60 mb-2">no_photography</span>
+                  <span className="font-mono text-xs font-bold text-text-primary">No Snapshot Frame Attached</span>
+                  <span className="font-sans text-[11px] text-text-muted mt-1 max-w-xs">
+                    This audit record contains telemetry data only. Live snapshots are captured from your webcam when safety risk thresholds are exceeded or manually triggered.
+                  </span>
+                </div>
               )}
             </div>
 
