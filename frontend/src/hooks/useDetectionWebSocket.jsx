@@ -74,14 +74,14 @@ export function useDetectionWebSocket(sessionId) {
         return
       }
 
-      if (event.code === 4000 || event.code === 4004) {
+      if (event.code === 4000) {
         setConnectionStatus('error')
-        setErrorMessage(event.reason || (event.code === 4004 ? 'Session expired or not found' : 'Stream error occurred'))
+        setErrorMessage(event.reason || 'Stream error occurred')
         return
       }
 
       setConnectionStatus('disconnected')
-      // Auto-reconnect for unexpected drops
+      // Auto-reconnect for unexpected drops (including server restarts / 4004)
       reconnectTimeoutRef.current = window.setTimeout(() => {
         if (sessionId) connect()
       }, 2000)

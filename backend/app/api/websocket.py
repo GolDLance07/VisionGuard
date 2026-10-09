@@ -8,6 +8,8 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState
 
+from app.video.stream import Session, VideoSource
+
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["websocket"])
 
@@ -21,8 +23,10 @@ async def detection_websocket(websocket: WebSocket, session_id: str):
     stream_manager = websocket.app.state.stream_manager
     session = stream_manager.get_session(session_id)
     if not session:
-        await websocket.close(code=4004, reason="Session not found")
-        return
+        # If server restarted or session was cleared, auto-recover webcam session so client can resume immediately
+        logger.info(f"Session {session_id} not found in memory (e.g. server restarted). Auto-recovering session.")
+        session = Session(id=session_id, source=VideoSource(type="webcam", device_index=0))
+        stream_manager.sessions[session_id] = session
 
     # 1. Video File Upload Session: Server reads file from disk and streams detections
     if session.source.type == "upload":

@@ -8,31 +8,54 @@ from app.risk.config import get_config
 from app.schemas.detection import DetectedObject, BoundingBox, get_hazard_category
 
 
-class Tracker:
-    def __init__(self):
-        self.config = get_config()
-        # Prefer higher-accuracy yolov8s.pt (11.2M params) if available over yolov8n (3.2M params)
-        model_path = self.config.model_path
-        if model_path in ("models/yolov8n.pt", "yolov8n.pt") and os.path.exists("models/yolov8s.pt"):
-            model_path = "models/yolov8s.pt"
-        self.model = YOLO(model_path)
+import torch
 
-        # Dual-Model Architecture: Load Pose Estimation model for skeletal keypoints & pointing detection
+_GLOBAL_MODEL = None
+_GLOBAL_POSE_MODEL = None
+_GLOBAL_WEAPON_MODEL = None
+
+
+def get_shared_models(config):
+    """Singleton model cache: loads neural network weights only once to prevent RAM duplication."""
+    global _GLOBAL_MODEL, _GLOBAL_POSE_MODEL, _GLOBAL_WEAPON_MODEL
+
+    if _GLOBAL_MODEL is None:
+        is_cloud = bool(os.environ.get("RENDER") or os.environ.get("PORT") or os.environ.get("LOW_MEMORY"))
+        # In cloud instances with strict 512MB RAM limits (Render Free), use yolov8n (3.2M params)
+        if is_cloud:
+            try:
+                torch.set_num_threads(1)
+            except Exception:
+                pass
+            model_path = "models/yolov8n.pt" if os.path.exists("models/yolov8n.pt") else "yolov8n.pt"
+        elif model_path in ("models/yolov8n.pt", "yolov8n.pt") and os.path.exists("models/yolov8s.pt"):
+            model_path = "models/yolov8s.pt"
+
+        _GLOBAL_MODEL = YOLO(model_path)
+
+    if _GLOBAL_POSE_MODEL is None:
         pose_path = "models/yolov8n-pose.pt" if os.path.exists("models/yolov8n-pose.pt") else "yolov8n-pose.pt"
         try:
-            self.pose_model = YOLO(pose_path)
+            _GLOBAL_POSE_MODEL = YOLO(pose_path)
         except Exception:
-            self.pose_model = None
+            _GLOBAL_POSE_MODEL = None
 
-        # Optional Custom Weapon Model: Auto-loads if fine-tuned weights exist
-        self.weapon_model = None
+    if _GLOBAL_WEAPON_MODEL is None:
         for wp in ("models/weapon_yolo.pt", "backend/models/weapon_yolo.pt", "experiments/runs/weapon_v1/weights/best.pt"):
             if os.path.exists(wp):
                 try:
-                    self.weapon_model = YOLO(wp)
+                    _GLOBAL_WEAPON_MODEL = YOLO(wp)
                     break
                 except Exception:
                     pass
+
+    return _GLOBAL_MODEL, _GLOBAL_POSE_MODEL, _GLOBAL_WEAPON_MODEL
+
+
+class Tracker:
+    def __init__(self):
+        self.config = get_config()
+        self.model, self.pose_model, self.weapon_model = get_shared_models(self.config)
 
         self.track_expiry = self.config.track_expiry_frames
         self._track_history: dict[int, int] = {}  # track_id -> frames_since_seen
@@ -41,18 +64,22 @@ class Tracker:
 
     def track(self, frame: np.ndarray) -> list[DetectedObject]:
         """Run tracking on a single frame with ByteTrack, temporal smoothing, and Pose estimation."""
-        try:
-            results = self.model.track(
-                frame,
-                persist=True,
-                tracker="bytetrack.yaml",
-                conf=0.15,
-                imgsz=640,
-                verbose=False,
-            )[0]
-        except Exception:
-            # Fallback if tracker config not found in environment
-            results = self.model.track(frame, persist=True, conf=0.15, verbose=False)[0]
+        is_cloud = bool(os.environ.get("RENDER") or os.environ.get("PORT") or os.environ.get("LOW_MEMORY"))
+        img_size = 480 if is_cloud else 640
+
+        with torch.inference_mode():
+            try:
+                results = self.model.track(
+                    frame,
+                    persist=True,
+                    tracker="bytetrack.yaml",
+                    conf=0.15,
+                    imgsz=img_size,
+                    verbose=False,
+                )[0]
+            except Exception:
+                # Fallback if tracker config not found in environment
+                results = self.model.track(frame, persist=True, conf=0.15, imgsz=img_size, verbose=False)[0]
 
         objects = []
 
@@ -123,7 +150,8 @@ class Tracker:
         # Supplementary Custom Weapon Model detections (if trained model available)
         if self.weapon_model is not None:
             try:
-                w_results = self.weapon_model(frame, conf=0.20, verbose=False)[0]
+                with torch.inference_mode():
+                    w_results = self.weapon_model(frame, conf=0.20, imgsz=img_size, verbose=False)[0]
                 next_id = max(current_ids, default=100) + 1
                 for w_box in w_results.boxes:
                     w_cls = int(w_box.cls[0])
@@ -184,7 +212,8 @@ class Tracker:
         # Anatomical Pose Estimation: Keypoint tracking for arm pointing & weapon brandishing
         if self.pose_model is not None and people:
             try:
-                pose_results = self.pose_model(frame, verbose=False)[0]
+                with torch.inference_mode():
+                    pose_results = self.pose_model(frame, verbose=False, imgsz=img_size)[0]
                 if pose_results.keypoints is not None and len(pose_results.keypoints.xy) > 0:
                     kpts_all = pose_results.keypoints.xy.cpu().numpy()
                     pose_boxes = pose_results.boxes.xyxy.cpu().numpy() if pose_results.boxes is not None else []

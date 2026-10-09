@@ -288,11 +288,8 @@ class VideoStreamManager:
 
         session.alert_manager.process(risk_frame)
 
-        # 7. Encode optimized frame for rendering and forensic snapshots
-        _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
-        encoded_b64 = base64.b64encode(buf).decode("utf-8")
-
-        risk_frame.frame = encoded_b64
+        # 7. Attach frame for forensic snapshots (reuse client frame directly to eliminate re-encode CPU/RAM overhead)
+        risk_frame.frame = frame_data if risk_frame.risk_level == "HIGH" else None
         risk_frame.fps = round(fps, 1)
         risk_frame.latency_ms = round(latency_ms, 1)
 

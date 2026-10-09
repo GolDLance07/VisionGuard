@@ -37,6 +37,8 @@ export function VideoPanel({
   const localStreamRef = useRef(null)
   const captureCanvasRef = useRef(null)
   const captureIntervalRef = useRef(null)
+  const isAwaitingReplyRef = useRef(false)
+  const lastSendTimeRef = useRef(0)
   const menuRef = useRef(null)
   const lastSoundTimeRef = useRef(0)
   const lastVoiceTimeRef = useRef({})
@@ -71,6 +73,13 @@ export function VideoPanel({
     }
   }, [frame])
 
+  // Unlock in-flight sender whenever a response arrives from the server
+  useEffect(() => {
+    if (frame) {
+      isAwaitingReplyRef.current = false
+    }
+  }, [frame])
+
   // Browser Webcam Streaming Effect: Stream local camera frames to server over WebSocket
   useEffect(() => {
     let active = true
@@ -100,27 +109,43 @@ export function VideoPanel({
           }
           setWebcamActive(true)
 
-          // Offscreen canvas for frame sampling at ~12.5 FPS
+          // Offscreen canvas: 480x360 for light memory footprint and fast cloud inference
           if (!captureCanvasRef.current) {
             captureCanvasRef.current = document.createElement('canvas')
-            captureCanvasRef.current.width = 640
-            captureCanvasRef.current.height = 480
+            captureCanvasRef.current.width = 480
+            captureCanvasRef.current.height = 360
           }
 
           const ctx = captureCanvasRef.current.getContext('2d')
+          isAwaitingReplyRef.current = false
+          lastSendTimeRef.current = 0
 
-          // Stream frames every 80ms (~12.5 FPS)
+          // Smart streaming loop with backpressure flow-control:
+          // Never send a new frame while the server is still processing the previous one!
           captureIntervalRef.current = setInterval(() => {
+            const now = Date.now()
+
+            // Watchdog: reset lock if server took longer than 1500ms
+            if (isAwaitingReplyRef.current && now - lastSendTimeRef.current > 1500) {
+              isAwaitingReplyRef.current = false
+            }
+
+            if (isAwaitingReplyRef.current) {
+              return // Skip to avoid server memory queueing!
+            }
+
             if (
               localVideoRef.current &&
               localVideoRef.current.readyState >= 2 &&
               typeof sendFrame === 'function'
             ) {
-              ctx.drawImage(localVideoRef.current, 0, 0, 640, 480)
-              const dataUrl = captureCanvasRef.current.toDataURL('image/jpeg', 0.6)
+              ctx.drawImage(localVideoRef.current, 0, 0, 480, 360)
+              const dataUrl = captureCanvasRef.current.toDataURL('image/jpeg', 0.5)
+              isAwaitingReplyRef.current = true
+              lastSendTimeRef.current = now
               sendFrame(dataUrl)
             }
-          }, 80)
+          }, 85)
         } catch (err) {
           console.error('Browser webcam error:', err)
           setWebcamError(
@@ -626,13 +651,14 @@ export function VideoPanel({
           ref={localVideoRef}
           playsInline
           muted
+          autoPlay
           className={`absolute inset-0 w-full h-full object-contain select-none z-0 ${
-            source === 'webcam' && webcamActive && !frame?.frame ? 'block' : 'hidden'
+            source === 'webcam' && webcamActive ? 'block' : 'hidden'
           }`}
         />
 
-        {/* Live Frame Image from Detection Engine */}
-        {frame?.frame && (
+        {/* Live Frame Image from Detection Engine (for uploaded videos or server frames) */}
+        {source !== 'webcam' && frame?.frame && (
           <img
             src={`data:image/jpeg;base64,${frame.frame}`}
             alt="Live safety monitoring feed"

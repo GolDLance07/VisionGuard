@@ -26,7 +26,7 @@ COPY . .
 RUN mkdir -p data/snapshots models
 
 # Pre-download YOLO models into models/ if not present
-RUN python -c "from ultralytics import YOLO; YOLO('yolov8s.pt'); YOLO('yolov8n-pose.pt')" || true
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt'); YOLO('yolov8s.pt'); YOLO('yolov8n-pose.pt')" || true
 
 EXPOSE 8000
 
