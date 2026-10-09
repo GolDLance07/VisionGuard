@@ -95,10 +95,11 @@ class Tracker:
 
         if results.boxes.id is None:
             self._increment_track_age()
-            track_ids = [i + 1 for i in range(len(results.boxes))]
+            track_ids = [None] * len(results.boxes)
+            logger.debug("ByteTrack assigned no IDs for current frame; objects marked untracked")
         else:
             track_ids = results.boxes.id.int().cpu().tolist()
-        current_ids = set(track_ids)
+        current_ids = {int(tid) for tid in track_ids if tid is not None}
 
         # Remove expired tracks
         expired = [tid for tid, age in self._track_history.items() if age > self.track_expiry]
@@ -107,7 +108,7 @@ class Tracker:
             if tid in self._track_class_votes:
                 del self._track_class_votes[tid]
 
-        for box, track_id in zip(results.boxes, track_ids):
+        for box, tid in zip(results.boxes, track_ids):
             cls_id = int(box.cls[0])
             raw_class_name = self.model.names[cls_id]
             confidence = float(box.conf[0])
@@ -126,18 +127,24 @@ class Tracker:
             h = max(1.0, y2 - y1)
             aspect_ratio = max(w, h) / min(w, h)
 
-            # Record detection in temporal history for track_id
-            self._track_class_votes[int(track_id)].append((raw_class_name, confidence))
-            if len(self._track_class_votes[int(track_id)]) > 7:
-                self._track_class_votes[int(track_id)].pop(0)
+            track_id = int(tid) if tid is not None else None
+            track_status = "tracked" if track_id is not None else "untracked"
 
-            # Temporal smoothed class: weighted vote across recent predictions
-            votes = self._track_class_votes[int(track_id)]
-            weight_by_class: dict[str, float] = defaultdict(float)
-            for c_name, conf in votes:
-                weight_by_class[c_name] += conf
+            if track_id is not None:
+                # Record detection in temporal history for track_id
+                self._track_class_votes[track_id].append((raw_class_name, confidence))
+                if len(self._track_class_votes[track_id]) > 7:
+                    self._track_class_votes[track_id].pop(0)
 
-            smoothed_class = max(weight_by_class.items(), key=lambda x: x[1])[0]
+                # Temporal smoothed class: weighted vote across recent predictions
+                votes = self._track_class_votes[track_id]
+                weight_by_class: dict[str, float] = defaultdict(float)
+                for c_name, conf in votes:
+                    weight_by_class[c_name] += conf
+
+                smoothed_class = max(weight_by_class.items(), key=lambda x: x[1])[0]
+            else:
+                smoothed_class = raw_class_name
 
             # Aspect ratio sanity check: baseball bats are slender & elongated (aspect ratio >= 1.5)
             if smoothed_class == "baseball bat" and aspect_ratio < 1.3 and confidence < 0.35:
@@ -147,7 +154,9 @@ class Tracker:
             category = get_hazard_category(smoothed_class)
 
             objects.append(DetectedObject(
-                id=int(track_id),
+                id=track_id,
+                track_id=track_id,
+                track_status=track_status,
                 class_name=smoothed_class,
                 confidence=confidence,
                 bbox=BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2),
@@ -155,7 +164,8 @@ class Tracker:
             ))
 
             # Reset age for seen tracks
-            self._track_history[int(track_id)] = 0
+            if track_id is not None:
+                self._track_history[track_id] = 0
 
         # Supplementary Custom Weapon Model detections (if trained model available)
         if self.weapon_model is not None:

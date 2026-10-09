@@ -1,35 +1,40 @@
 // Centralized configuration for VisionGuard API and WebSocket endpoints
-// Handles local development proxying vs production cloud deployments (Vercel -> Render)
-
-export const DEFAULT_CLOUD_API = 'https://visionguard-c4et.onrender.com'
-export const DEFAULT_CLOUD_WS = 'wss://visionguard-c4et.onrender.com'
+// Follows VisionGuard Full Refactoring Specification §3.2 and §5.4:
+// - Deterministic same-origin proxy in local development (Vite -> localhost:8000)
+// - Explicit environment variables for cross-origin deployment
+// - No silent or hardcoded cloud fallbacks
 
 export function getApiBase() {
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL.replace(/\/+$/, '')
+  const envUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL
+  if (envUrl) {
+    return envUrl.replace(/\/+$/, '')
   }
-  // When running locally on Vite dev server, use empty string to leverage the Vite proxy (/api -> localhost:8000)
-  if (
-    typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ) {
-    return ''
-  }
-  // On cloud hosting (e.g. Vercel), route directly to the active Render backend
-  return DEFAULT_CLOUD_API
+  // When running locally on Vite dev server or with same-origin reverse proxy,
+  // return empty string so relative paths (/api/...) are routed by Vite or Nginx proxy
+  return ''
 }
 
 export function getWsBase() {
-  if (import.meta.env.VITE_WS_URL) {
-    return import.meta.env.VITE_WS_URL.replace(/\/+$/, '')
+  const envWs = import.meta.env.VITE_WS_BASE_URL || import.meta.env.VITE_WS_URL
+  if (envWs) {
+    return envWs.replace(/\/+$/, '')
   }
-  if (
-    typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ) {
+  if (typeof window !== 'undefined') {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     return `${protocol}//${window.location.host}`
   }
-  // On cloud hosting (e.g. Vercel), route WebSocket directly to the active Render backend
-  return DEFAULT_CLOUD_WS
+  return 'ws://localhost:5173'
+}
+
+export function getRuntimeConfig() {
+  const isLocal =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+
+  return {
+    apiBase: getApiBase(),
+    wsBase: getWsBase(),
+    isLocal,
+    mode: import.meta.env.MODE,
+  }
 }

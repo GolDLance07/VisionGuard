@@ -109,3 +109,43 @@ def test_tracker_model_resolution():
     tracker = Tracker()
     assert tracker.model is not None
 
+
+@pytest.mark.asyncio
+async def test_process_client_frame_errors():
+    from app.video.stream import VideoStreamManager, VideoSource
+    sm = VideoStreamManager()
+
+    # 1. Non-existent session
+    frame, err = await sm.process_client_frame("non-existent-session-id", "data:image/jpeg;base64,abc", sequence=42)
+    assert frame is None
+    assert err is not None
+    assert err["type"] == "error"
+    assert err["error_code"] == "SESSION_NOT_FOUND"
+    assert err["sequence"] == 42
+
+    # 2. Invalid base64 in valid session
+    session_id = sm.start_session(VideoSource(type="webcam", device_index=0))
+    frame, err = await sm.process_client_frame(session_id, "corrupt_data", sequence=101)
+    assert frame is None
+    assert err is not None
+    assert err["type"] == "error"
+    assert err["error_code"] == "DECODE_ERROR"
+    assert err["sequence"] == 101
+
+
+def test_detected_object_untracked_schema():
+    from app.schemas.detection import DetectedObject, BoundingBox
+    # Verify untracked object instantiation without fabricated ID
+    obj = DetectedObject(
+        id=None,
+        track_id=None,
+        track_status="untracked",
+        class_name="knife",
+        confidence=0.88,
+        bbox=BoundingBox(x1=10, y1=20, x2=50, y2=80)
+    )
+    assert obj.id is None
+    assert obj.track_id is None
+    assert obj.track_status == "untracked"
+
+

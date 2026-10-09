@@ -66,7 +66,9 @@ def get_hazard_category(class_name: str) -> str:
 class DetectedObject(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    id: int
+    id: int | None = None
+    track_id: int | None = None
+    track_status: Literal["tracked", "untracked"] = "tracked"
     class_name: str = Field(alias="class")
     confidence: float = Field(..., ge=0, le=1)
     bbox: BoundingBox
@@ -90,6 +92,7 @@ class RiskReason(BaseModel):
 class DetectionFrame(BaseModel):
     timestamp: float
     frame: str | None = None          # base64-encoded JPEG of the processed frame
+    sequence: int | None = None
     objects: list[DetectedObject]
     risk_score: float = Field(..., ge=0, le=1)
     risk_level: RiskLevel

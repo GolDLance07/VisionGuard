@@ -232,14 +232,23 @@ class VideoStreamManager:
         async for frame in self._capture_loop(session):
             yield frame
 
-    async def process_client_frame(self, session_id: str, frame_data: str) -> Optional[DetectionFrame]:
+    async def process_client_frame(
+        self, session_id: str, frame_data: str, sequence: int | None = None
+    ) -> tuple[Optional[DetectionFrame], Optional[dict]]:
         """
         Process a single video frame sent by the client browser (e.g. webcam streaming).
-        Decodes base64 JPEG, executes tracker + movement + risk pipeline, and returns DetectionFrame.
+        Decodes base64 JPEG, executes tracker + movement + risk pipeline, and returns (DetectionFrame, error_dict).
         """
         session = self.get_session(session_id)
         if not session:
-            return None
+            logger.warning(f"Session {session_id} not found during client frame processing")
+            return None, {
+                "type": "error",
+                "session_id": session_id,
+                "sequence": sequence,
+                "error_code": "SESSION_NOT_FOUND",
+                "message": "Session not found or expired.",
+            }
 
         # 1. Decode base64 frame from client
         if frame_data.startswith("data:"):
@@ -250,10 +259,23 @@ class VideoStreamManager:
             nparr = np.frombuffer(raw_bytes, np.uint8)
             frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             if frame is None:
-                return None
+                logger.warning(f"Session {session_id}: cv2.imdecode failed on client frame")
+                return None, {
+                    "type": "error",
+                    "session_id": session_id,
+                    "sequence": sequence,
+                    "error_code": "DECODE_ERROR",
+                    "message": "Unable to decode client video frame.",
+                }
         except Exception as err:
             logger.warning(f"Session {session_id}: client frame decode error: {err}")
-            return None
+            return None, {
+                "type": "error",
+                "session_id": session_id,
+                "sequence": sequence,
+                "error_code": "DECODE_ERROR",
+                "message": f"Client frame base64 decode error: {str(err)}",
+            }
 
         session.frame_count += 1
         t_start = time.perf_counter()
@@ -272,12 +294,18 @@ class VideoStreamManager:
                 self._process_frame, session, frame.copy()
             )
         except Exception as e:
-            logger.warning(f"Session {session_id}: inference failed on client frame: {e}")
-            return None
+            logger.exception(f"Session {session_id}: inference failed on client frame: {e}")
+            return None, {
+                "type": "error",
+                "session_id": session_id,
+                "sequence": sequence,
+                "error_code": "INFERENCE_FAILED",
+                "message": "Frame inference processing error.",
+            }
 
         # 4. Enrich objects with velocity data
         for obj in objects:
-            if obj.id in movement:
+            if obj.id is not None and obj.id in movement:
                 obj.speed = movement[obj.id]["speed"]
                 obj.direction = movement[obj.id]["direction"]
 
@@ -298,9 +326,10 @@ class VideoStreamManager:
 
         session.alert_manager.process(risk_frame)
 
-        # 7. Attach frame for forensic snapshots (reuse client frame directly to eliminate re-encode CPU/RAM overhead)
+        # 7. Attach frame metadata
         risk_frame.frame = frame_data if risk_frame.risk_level == "HIGH" else None
         risk_frame.fps = round(fps, 1)
         risk_frame.latency_ms = round(latency_ms, 1)
+        risk_frame.sequence = sequence
 
-        return risk_frame
+        return risk_frame, None

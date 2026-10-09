@@ -86,6 +86,8 @@ class MovementEngine:
         current_ids = set()
 
         for obj in objects:
+            if obj.id is None or getattr(obj, "track_status", "tracked") == "untracked":
+                continue
             center_x = (obj.bbox.x1 + obj.bbox.x2) / 2
             center_y = (obj.bbox.y1 + obj.bbox.y2) / 2
             bbox_h = obj.bbox.y2 - obj.bbox.y1

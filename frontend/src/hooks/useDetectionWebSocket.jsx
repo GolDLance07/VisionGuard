@@ -54,8 +54,13 @@ export function useDetectionWebSocket(sessionId) {
 
     ws.onmessage = (event) => {
       try {
-        const frame = JSON.parse(event.data)
-        setLatestFrame(frame)
+        const payload = JSON.parse(event.data)
+        if (payload.type === 'error') {
+          console.warn('Backend reported frame error:', payload)
+          setErrorMessage(payload.message || payload.error_code || 'Frame processing error')
+          return
+        }
+        setLatestFrame(payload)
       } catch (err) {
         console.error('Failed to parse frame JSON:', err)
       }
@@ -100,9 +105,9 @@ export function useDetectionWebSocket(sessionId) {
     }
   }, [sessionId, connect, disconnect])
 
-  const sendFrame = useCallback((frameData) => {
+  const sendFrame = useCallback((frameData, sequence = 0) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'frame', frame: frameData }))
+      wsRef.current.send(JSON.stringify({ type: 'frame', frame: frameData, sequence }))
       return true
     }
     return false

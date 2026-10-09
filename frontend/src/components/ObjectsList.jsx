@@ -31,16 +31,21 @@ export function ObjectsList({ objects = [], unsafeClasses = [] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-surface-border/30 font-mono text-[11px]">
-            {displayObjects.map((obj) => {
+            {displayObjects.map((obj, idx) => {
               const isPerson = obj.class_name.toLowerCase() === 'person'
               const isUnsafe =
                 unsafeClasses.includes(obj.class_name) ||
                 ['knife', 'scissors', 'gun', 'weapon'].includes(obj.class_name.toLowerCase())
-              const trackIdStr = obj.track_id || (isPerson ? `P-${obj.id}` : `O-${obj.id}`)
+              const trackIdStr =
+                obj.track_id != null
+                  ? `#${obj.track_id}`
+                  : obj.track_status === 'untracked' || obj.id == null
+                  ? 'Untracked'
+                  : `#${obj.id}`
 
               return (
                 <tr
-                  key={obj.id}
+                  key={obj.track_id ?? obj.id ?? `obj-${idx}`}
                   className={isUnsafe ? 'bg-detection-object/10 border-l-2 border-l-detection-object' : ''}
                 >
                   <td className={`py-2.5 font-semibold flex items-center gap-1.5 ${
@@ -49,7 +54,7 @@ export function ObjectsList({ objects = [], unsafeClasses = [] }) {
                     <span className={`w-2 h-2 rounded-full ${
                       isPerson ? 'bg-detection-person' : isUnsafe ? 'bg-detection-object' : 'bg-primary'
                     }`}></span>
-                    {obj.class_name.charAt(0).toUpperCase() + obj.class_name.slice(1)} #{obj.id}
+                    {obj.class_name.charAt(0).toUpperCase() + obj.class_name.slice(1)} {trackIdStr !== 'Untracked' ? trackIdStr : '(untracked)'}
                   </td>
                   <td className="py-2.5 text-text-primary font-bold">
                     {(obj.confidence * 100).toFixed(0)}%

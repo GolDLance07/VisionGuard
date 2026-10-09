@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import JSZip from 'jszip'
-import { getApiBase } from '../config'
+import { getApiBase, getRuntimeConfig } from '../config'
 
 export function VideoPanel({
   frame,
@@ -40,6 +40,7 @@ export function VideoPanel({
   const captureIntervalRef = useRef(null)
   const isAwaitingReplyRef = useRef(false)
   const lastSendTimeRef = useRef(0)
+  const frameSeqRef = useRef(0)
   const menuRef = useRef(null)
   const lastSoundTimeRef = useRef(0)
   const lastVoiceTimeRef = useRef({})
@@ -76,10 +77,10 @@ export function VideoPanel({
 
   // Unlock in-flight sender whenever a response arrives from the server
   useEffect(() => {
-    if (frame) {
+    if (frame || errorMessage) {
       isAwaitingReplyRef.current = false
     }
-  }, [frame])
+  }, [frame, errorMessage])
 
   // Browser Webcam Streaming Effect: Stream local camera frames to server over WebSocket
   useEffect(() => {
@@ -113,8 +114,8 @@ export function VideoPanel({
           // Offscreen canvas: 480x360 for light memory footprint and fast cloud inference
           if (!captureCanvasRef.current) {
             captureCanvasRef.current = document.createElement('canvas')
-            captureCanvasRef.current.width = 480
-            captureCanvasRef.current.height = 360
+            captureCanvasRef.current.width = 640
+            captureCanvasRef.current.height = 480
           }
 
           const ctx = captureCanvasRef.current.getContext('2d')
@@ -140,11 +141,14 @@ export function VideoPanel({
               localVideoRef.current.readyState >= 2 &&
               typeof sendFrame === 'function'
             ) {
-              ctx.drawImage(localVideoRef.current, 0, 0, 480, 360)
-              const dataUrl = captureCanvasRef.current.toDataURL('image/jpeg', 0.5)
-              isAwaitingReplyRef.current = true
-              lastSendTimeRef.current = now
-              sendFrame(dataUrl)
+              ctx.drawImage(localVideoRef.current, 0, 0, 640, 480)
+              const dataUrl = captureCanvasRef.current.toDataURL('image/jpeg', 0.6)
+              frameSeqRef.current += 1
+              const sent = sendFrame(dataUrl, frameSeqRef.current)
+              if (sent) {
+                isAwaitingReplyRef.current = true
+                lastSendTimeRef.current = now
+              }
             }
           }, 85)
         } catch (err) {
@@ -717,7 +721,7 @@ export function VideoPanel({
               ></span>
               <span className="font-mono text-[11px] text-text-primary font-semibold">
                 {sessionId && !frame
-                  ? 'CONNECTING TO AI PIPELINE (RENDER CLOUD)...'
+                  ? 'STREAM CONNECTED · AWAITING FIRST DETECTION...'
                   : 'SURVEILLANCE ACTIVE · PERIMETER SECURE'}
               </span>
             </div>
@@ -1035,65 +1039,110 @@ export function VideoPanel({
               const vx = cx + Math.cos(rad) * vecLen
               const vy = top_y + Math.sin(rad) * vecLen
 
+              const idStr = obj.track_id != null ? `#${obj.track_id}` : (obj.track_status === 'untracked' || obj.id == null ? 'UNTRACKED' : `#${obj.id}`)
+
               // Badge Label text
               let labelText = ''
               if (isPerson) {
                 if (roleType === 'red') {
                   const ptVector = pointingThreatVectors.find((v) => v.fromPerson.id === obj.id)
                   if (ptVector) {
-                    labelText = `⚠ PERSON #${obj.id} · ${ptVector.reason} PERSON #${ptVector.toPerson.id}`
+                    const toId = ptVector.toPerson.track_id != null ? `#${ptVector.toPerson.track_id}` : (ptVector.toPerson.track_status === 'untracked' || ptVector.toPerson.id == null ? 'UNTRACKED' : `#${ptVector.toPerson.id}`)
+                    labelText = `⚠ PERSON ${idStr} · ${ptVector.reason} PERSON ${toId}`
                   } else if (obj.speed && obj.speed > 25) {
-                    labelText = `⚠ PERSON #${obj.id} · RAPID MOVEMENT (${obj.speed.toFixed(0)}px/s)`
+                    labelText = `⚠ PERSON ${idStr} · RAPID MOVEMENT (${obj.speed.toFixed(0)}px/s)`
                   } else {
-                    labelText = `⚠ PERSON #${obj.id} · CRITICAL THREAT`
+                    labelText = `⚠ PERSON ${idStr} · CRITICAL THREAT`
                   }
                 } else if (roleType === 'blunt') {
-                  labelText = `PERSON #${obj.id} · HOLDING BLUNT OBJECT`
+                  labelText = `PERSON ${idStr} · HOLDING BLUNT OBJECT`
                 } else if (roleType === 'sharp') {
-                  labelText = `PERSON #${obj.id} · HOLDING SHARP OBJECT`
+                  labelText = `PERSON ${idStr} · HOLDING SHARP OBJECT`
                 } else {
-                  labelText = `PERSON #${obj.id} · ${(obj.confidence * 100).toFixed(0)}%`
+                  labelText = `PERSON ${idStr} · ${(obj.confidence * 100).toFixed(0)}%`
                 }
               } else {
                 const isHeld = heldObjectIds.has(obj.id)
                 if (roleType === 'red') {
-                  labelText = `⚠ ${isSharpObj(obj) ? 'SHARP OBJECT' : isBluntObj(obj) ? 'BLUNT OBJECT' : 'WEAPON'} #${obj.id} · POINTED/ACTIVE`
+                  labelText = `⚠ ${isSharpObj(obj) ? 'SHARP OBJECT' : isBluntObj(obj) ? 'BLUNT OBJECT' : 'WEAPON'} ${idStr} · POINTED/ACTIVE`
                 } else if (roleType === 'blunt') {
-                  labelText = `BLUNT OBJECT #${obj.id}${isHeld ? ' · HELD' : ''} · ${(obj.confidence * 100).toFixed(0)}%`
+                  labelText = `BLUNT OBJECT ${idStr}${isHeld ? ' · HELD' : ''} · ${(obj.confidence * 100).toFixed(0)}%`
                 } else if (roleType === 'sharp') {
-                  labelText = `SHARP OBJECT #${obj.id}${isHeld ? ' · HELD' : ''} · ${(obj.confidence * 100).toFixed(0)}%`
+                  labelText = `SHARP OBJECT ${idStr}${isHeld ? ' · HELD' : ''} · ${(obj.confidence * 100).toFixed(0)}%`
                 } else {
-                  labelText = `${obj.class_name.toUpperCase()} #${obj.id} · ${(obj.confidence * 100).toFixed(0)}%`
+                  labelText = `${obj.class_name.toUpperCase()} ${idStr} · ${(obj.confidence * 100).toFixed(0)}%`
                 }
               }
 
-              const badgeWidth = Math.min(labelText.length * 6.6 + 18, 230)
-              const badgeX = Math.max(cx - badgeWidth / 2, 4)
-              const badgeY = Math.max(top_y - 24, 4)
+              const boxW = Math.max(x2 - x1, 4)
+              const boxH = Math.max(y2 - y1, 4)
+              const badgeWidth = Math.min(labelText.length * 6.5 + 16, Math.max(boxW, 160))
+              const badgeX = Math.max(x1, 4)
+              const badgeY = Math.max(y1 - 18, 4)
 
               // Outer ping animation speed matched to risk severity
               const pingDuration =
                 roleType === 'red' ? '0.75s' : roleType === 'sharp' ? '1.4s' : roleType === 'blunt' ? '2.0s' : '3.0s'
 
               return (
-                <g key={`tracker-circle-${obj.id}`}>
-                  {/* Subtle vertical anchor guideline to object */}
+                <g key={`detected-obj-${obj.track_id ?? obj.id ?? `untracked-${idx}`}`}>
+                  {/* Actual Bounding Box Rectangle */}
+                  <rect
+                    x={x1}
+                    y={y1}
+                    width={boxW}
+                    height={boxH}
+                    fill={color}
+                    fillOpacity={roleType === 'red' ? 0.15 : 0.05}
+                    stroke={color}
+                    strokeWidth={roleType === 'red' ? 2 : 1.5}
+                    strokeDasharray={obj.track_status === 'untracked' ? '4 3' : 'none'}
+                    rx="3"
+                  />
+
+                  {/* Corner Accent Brackets */}
+                  <path
+                    d={`M ${x1} ${Math.min(y1 + 10, y1 + boxH / 2)} L ${x1} ${y1} L ${Math.min(x1 + 10, x1 + boxW / 2)} ${y1}`}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth="2.5"
+                  />
+                  <path
+                    d={`M ${Math.max(x2 - 10, x1 + boxW / 2)} ${y1} L ${x2} ${y1} L ${x2} ${Math.min(y1 + 10, y1 + boxH / 2)}`}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth="2.5"
+                  />
+                  <path
+                    d={`M ${x1} ${Math.max(y2 - 10, y1 + boxH / 2)} L ${x1} ${y2} L ${Math.min(x1 + 10, x1 + boxW / 2)} ${y2}`}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth="2.5"
+                  />
+                  <path
+                    d={`M ${Math.max(x2 - 10, x1 + boxW / 2)} ${y2} L ${x2} ${y2} L ${x2} ${Math.max(y2 - 10, y1 + boxH / 2)}`}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth="2.5"
+                  />
+
+                  {/* Subtle vertical anchor guideline to object center */}
                   <line
                     x1={cx}
-                    y1={top_y + 12}
+                    y1={top_y}
                     x2={cx}
-                    y2={Math.min(y2, top_y + (isPerson ? 40 : 18))}
+                    y2={Math.min(y2, top_y + 16)}
                     stroke={color}
                     strokeWidth="1"
                     strokeDasharray="2 2"
                     strokeOpacity="0.35"
                   />
 
-                  {/* Concentric Circle 1: Outer Radar Ripple */}
+                  {/* Concentric Circle: Outer Radar Ripple at Top Center */}
                   <circle
                     cx={cx}
                     cy={top_y}
-                    r="15"
+                    r="12"
                     fill="none"
                     stroke={color}
                     strokeWidth="1.2"
@@ -1105,42 +1154,13 @@ export function VideoPanel({
                     }}
                   />
 
-                  {/* Concentric Circle 2: Outer Ring */}
-                  <circle
-                    cx={cx}
-                    cy={top_y}
-                    r="11"
-                    fill="none"
-                    stroke={color}
-                    strokeWidth="1.6"
-                    strokeDasharray={roleType !== 'normal' ? '3 2' : 'none'}
-                    className={roleType === 'red' ? 'animate-pulse' : ''}
-                  />
-
-                  {/* Concentric Circle 3: Middle Ring */}
-                  <circle
-                    cx={cx}
-                    cy={top_y}
-                    r="6"
-                    fill={color}
-                    fillOpacity="0.22"
-                    stroke={color}
-                    strokeWidth="1.8"
-                  />
-
-                  {/* Concentric Circle 4: Inner Solid Target Dot */}
+                  {/* Inner Solid Target Dot */}
                   <circle
                     cx={cx}
                     cy={top_y}
                     r="2.5"
                     fill={color}
                   />
-
-                  {/* Crosshair Reticle Ticks */}
-                  <line x1={cx - 15} y1={top_y} x2={cx - 11} y2={top_y} stroke={color} strokeWidth="1.5" />
-                  <line x1={cx + 11} y1={top_y} x2={cx + 15} y2={top_y} stroke={color} strokeWidth="1.5" />
-                  <line x1={cx} y1={top_y - 15} x2={cx} y2={top_y - 11} stroke={color} strokeWidth="1.5" />
-                  <line x1={cx} y1={top_y + 11} x2={cx} y2={top_y + 15} stroke={color} strokeWidth="1.5" />
 
                   {/* Motion Velocity Vector */}
                   {hasMotion && (
@@ -1168,7 +1188,7 @@ export function VideoPanel({
                     x={badgeX}
                     y={badgeY}
                     width={badgeWidth}
-                    height="16"
+                    height="17"
                     rx="3"
                     fill="rgba(5, 15, 24, 0.94)"
                     stroke={color}
@@ -1176,13 +1196,12 @@ export function VideoPanel({
                     className="shadow-sm"
                   />
                   <text
-                    x={badgeX + badgeWidth / 2}
-                    y={badgeY + 11}
+                    x={badgeX + 6}
+                    y={badgeY + 11.5}
                     fill={color}
                     fontSize="8.5"
                     fontWeight="bold"
                     fontFamily="JetBrains Mono, monospace"
-                    textAnchor="middle"
                   >
                     {labelText}
                   </text>
@@ -1214,7 +1233,7 @@ export function VideoPanel({
                 </div>
                 <div className="text-[11px] text-text-muted font-mono">
                   {sessionId
-                    ? 'Initializing YOLOv8 inference & tracking engine (cloud server may take ~15-25s to wake up on first start)'
+                    ? 'Initializing YOLOv8 inference & tracking engine'
                     : 'Select a video source or click "Start Webcam" to begin'}
                 </div>
               </div>
@@ -1244,6 +1263,18 @@ export function VideoPanel({
             <span className="font-mono text-[11px] text-text-muted">
               {(frame?.latency_ms || 0).toFixed(0)} ms latency
             </span>
+            <span className="text-outline-variant">·</span>
+            <span className="font-mono text-[11px] text-text-primary">
+              {frame?.objects?.length || 0} OBJS
+            </span>
+            {frame?.sequence != null && (
+              <>
+                <span className="text-outline-variant hidden md:inline">·</span>
+                <span className="font-mono text-[11px] text-text-muted hidden md:inline">
+                  SEQ #{frame.sequence}
+                </span>
+              </>
+            )}
             <span className="text-outline-variant hidden sm:inline">·</span>
 
             {/* Interactive Source Pill Switcher Dropdown */}

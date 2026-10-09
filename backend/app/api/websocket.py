@@ -49,9 +49,14 @@ async def detection_websocket(websocket: WebSocket, session_id: str):
                 if not data:
                     continue
                 frame_data = data.get("frame") or data.get("image") or data.get("data")
+                sequence = data.get("sequence")
                 if frame_data:
-                    detection_frame = await stream_manager.process_client_frame(session_id, frame_data)
-                    if detection_frame and websocket.client_state == WebSocketState.CONNECTED:
+                    detection_frame, error_dict = await stream_manager.process_client_frame(
+                        session_id, frame_data, sequence=sequence
+                    )
+                    if error_dict and websocket.client_state == WebSocketState.CONNECTED:
+                        await websocket.send_json(error_dict)
+                    elif detection_frame and websocket.client_state == WebSocketState.CONNECTED:
                         await websocket.send_json(detection_frame.model_dump(mode="json"))
         except WebSocketDisconnect:
             pass
