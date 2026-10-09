@@ -55,7 +55,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://localhost:3000",
         "http://127.0.0.1:5173",
-        "https://vision-guard-2thugeyub-me-abb2.vercel.app",
+        "https://visionguard-3uqy1rb74-me-abb2.vercel.app/"
     ],
     allow_origin_regex=r"https://.*\.vercel\.app.*|https://.*\.onrender\.com.*|http://localhost:.*",
     allow_credentials=True,
