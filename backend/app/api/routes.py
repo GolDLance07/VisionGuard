@@ -86,14 +86,6 @@ async def start_session(request: SessionStartRequest, req: Request):
     if request.source == "webcam":
         if request.device_index is None:
             raise HTTPException(400, "device_index required for webcam source")
-        import sys, glob
-        if sys.platform.startswith("linux") and not glob.glob("/dev/video*"):
-            raise HTTPException(
-                400,
-                "No hardware camera detected on remote server (Render). "
-                "Cloud server instances do not have physical USB webcams attached. "
-                "Please select 'Video File' to upload and monitor video footage, or run VisionGuard locally on your computer for live physical webcam monitoring."
-            )
         source = VideoSource(type="webcam", device_index=request.device_index)
     elif request.source == "upload":
         if not request.file_ref:

@@ -42,6 +42,7 @@ function App() {
     latestFrame,
     connectionStatus,
     errorMessage: wsErrorMessage,
+    sendFrame,
   } = useDetectionWebSocket(sessionId)
 
   // Sync dark mode class on html element
@@ -395,6 +396,7 @@ function App() {
                   isStarting={isStarting}
                   effectiveRiskLevel={effectiveRiskLevel}
                   onCaptureSnapshot={handleCaptureSnapshot}
+                  sendFrame={sendFrame}
                 />
               </div>
 

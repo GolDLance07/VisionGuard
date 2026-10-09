@@ -19,6 +19,7 @@ export function VideoPanel({
   isStarting = false,
   effectiveRiskLevel,
   onCaptureSnapshot,
+  sendFrame,
 }) {
   const [fullscreen, setFullscreen] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -27,9 +28,15 @@ export function VideoPanel({
   const [streamUrlInput, setStreamUrlInput] = useState('')
   const [showStreamModal, setShowStreamModal] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [webcamActive, setWebcamActive] = useState(false)
+  const [webcamError, setWebcamError] = useState(null)
 
   const fileInputRef = useRef(null)
   const videoContainerRef = useRef(null)
+  const localVideoRef = useRef(null)
+  const localStreamRef = useRef(null)
+  const captureCanvasRef = useRef(null)
+  const captureIntervalRef = useRef(null)
   const menuRef = useRef(null)
   const lastSoundTimeRef = useRef(0)
   const lastVoiceTimeRef = useRef({})
@@ -63,6 +70,93 @@ export function VideoPanel({
       telemetryHistoryRef.current.shift()
     }
   }, [frame])
+
+  // Browser Webcam Streaming Effect: Stream local camera frames to server over WebSocket
+  useEffect(() => {
+    let active = true
+
+    if (source === 'webcam' && sessionId) {
+      async function startBrowserWebcam() {
+        try {
+          setWebcamError(null)
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              facingMode: 'user',
+            },
+            audio: false,
+          })
+
+          if (!active) {
+            stream.getTracks().forEach((t) => t.stop())
+            return
+          }
+
+          localStreamRef.current = stream
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream
+            localVideoRef.current.play().catch(() => {})
+          }
+          setWebcamActive(true)
+
+          // Offscreen canvas for frame sampling at ~12.5 FPS
+          if (!captureCanvasRef.current) {
+            captureCanvasRef.current = document.createElement('canvas')
+            captureCanvasRef.current.width = 640
+            captureCanvasRef.current.height = 480
+          }
+
+          const ctx = captureCanvasRef.current.getContext('2d')
+
+          // Stream frames every 80ms (~12.5 FPS)
+          captureIntervalRef.current = setInterval(() => {
+            if (
+              localVideoRef.current &&
+              localVideoRef.current.readyState >= 2 &&
+              typeof sendFrame === 'function'
+            ) {
+              ctx.drawImage(localVideoRef.current, 0, 0, 640, 480)
+              const dataUrl = captureCanvasRef.current.toDataURL('image/jpeg', 0.6)
+              sendFrame(dataUrl)
+            }
+          }, 80)
+        } catch (err) {
+          console.error('Browser webcam error:', err)
+          setWebcamError(
+            err.name === 'NotAllowedError'
+              ? 'Camera permission denied. Please allow camera access in your browser to monitor.'
+              : `Unable to access browser webcam: ${err.message}`
+          )
+        }
+      }
+
+      startBrowserWebcam()
+    } else {
+      // Clean up webcam tracks when session stops or source changes
+      if (captureIntervalRef.current) {
+        clearInterval(captureIntervalRef.current)
+        captureIntervalRef.current = null
+      }
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((t) => t.stop())
+        localStreamRef.current = null
+      }
+      setWebcamActive(false)
+    }
+
+    return () => {
+      active = false
+      if (captureIntervalRef.current) {
+        clearInterval(captureIntervalRef.current)
+        captureIntervalRef.current = null
+      }
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((t) => t.stop())
+        localStreamRef.current = null
+      }
+    }
+  }, [sessionId, source, sendFrame])
 
   // Helper function to export complete incident package ZIP
   const handleExportIncidentPackage = async () => {
@@ -527,13 +621,31 @@ export function VideoPanel({
           </div>
         )}
 
-        {/* Live Frame Image */}
+        {/* Local Browser Webcam Video Feed */}
+        <video
+          ref={localVideoRef}
+          playsInline
+          muted
+          className={`absolute inset-0 w-full h-full object-contain select-none z-0 ${
+            source === 'webcam' && webcamActive && !frame?.frame ? 'block' : 'hidden'
+          }`}
+        />
+
+        {/* Live Frame Image from Detection Engine */}
         {frame?.frame && (
           <img
             src={`data:image/jpeg;base64,${frame.frame}`}
             alt="Live safety monitoring feed"
             className="absolute inset-0 w-full h-full object-contain select-none z-0"
           />
+        )}
+
+        {/* Browser Webcam Error Banner */}
+        {webcamError && (
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 max-w-md bg-red-950/90 text-red-200 border border-red-800 text-xs px-4 py-2 rounded-lg shadow-xl backdrop-blur-md flex items-center gap-2">
+            <span className="text-sm">⚠</span>
+            <span>{webcamError}</span>
+          </div>
         )}
 
         {/* Top Overlay Banner with Color Tracking Legend */}

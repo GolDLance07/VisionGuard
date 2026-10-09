@@ -3,6 +3,7 @@ Video stream capture with timestamps and session management.
 Inference runs in a background thread to keep the FastAPI event loop free.
 """
 import cv2
+import numpy as np
 import asyncio
 import time
 import uuid
@@ -220,3 +221,79 @@ class VideoStreamManager:
 
         async for frame in self._capture_loop(session):
             yield frame
+
+    async def process_client_frame(self, session_id: str, frame_data: str) -> Optional[DetectionFrame]:
+        """
+        Process a single video frame sent by the client browser (e.g. webcam streaming).
+        Decodes base64 JPEG, executes tracker + movement + risk pipeline, and returns DetectionFrame.
+        """
+        session = self.get_session(session_id)
+        if not session:
+            return None
+
+        # 1. Decode base64 frame from client
+        if frame_data.startswith("data:"):
+            frame_data = frame_data.split(",", 1)[-1]
+
+        try:
+            raw_bytes = base64.b64decode(frame_data)
+            nparr = np.frombuffer(raw_bytes, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if frame is None:
+                return None
+        except Exception as err:
+            logger.warning(f"Session {session_id}: client frame decode error: {err}")
+            return None
+
+        session.frame_count += 1
+        t_start = time.perf_counter()
+        timestamp = time.time()
+
+        # 2. Resize to processing resolution
+        config = session.tracker.config
+        target_w, target_h = config.processing_resolution
+        h, w = frame.shape[:2]
+        if (w, h) != (target_w, target_h):
+            frame = cv2.resize(frame, (target_w, target_h))
+
+        # 3. Offload inference to worker thread
+        try:
+            objects, movement = await asyncio.to_thread(
+                self._process_frame, session, frame.copy()
+            )
+        except Exception as e:
+            logger.warning(f"Session {session_id}: inference failed on client frame: {e}")
+            return None
+
+        # 4. Enrich objects with velocity data
+        for obj in objects:
+            if obj.id in movement:
+                obj.speed = movement[obj.id]["speed"]
+                obj.direction = movement[obj.id]["direction"]
+
+        # 5. Evaluate multi-factor safety risk
+        risk_frame = session.risk_engine.evaluate(objects, movement, timestamp)
+
+        # 6. Measure latency and rolling client FPS
+        t_end = time.perf_counter()
+        latency_ms = (t_end - t_start) * 1000
+
+        if not hasattr(session, "_client_frame_times"):
+            session._client_frame_times = deque(maxlen=30)
+        session._client_frame_times.append(t_end)
+        fps = (
+            len(session._client_frame_times) / (session._client_frame_times[-1] - session._client_frame_times[0])
+            if len(session._client_frame_times) > 1 else 0.0
+        )
+
+        session.alert_manager.process(risk_frame)
+
+        # 7. Encode optimized frame for rendering and forensic snapshots
+        _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        encoded_b64 = base64.b64encode(buf).decode("utf-8")
+
+        risk_frame.frame = encoded_b64
+        risk_frame.fps = round(fps, 1)
+        risk_frame.latency_ms = round(latency_ms, 1)
+
+        return risk_frame

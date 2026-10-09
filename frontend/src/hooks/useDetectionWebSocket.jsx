@@ -106,5 +106,13 @@ export function useDetectionWebSocket(sessionId) {
     }
   }, [sessionId, connect, disconnect])
 
-  return { latestFrame, connect, disconnect, connectionStatus, errorMessage }
+  const sendFrame = useCallback((frameData) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'frame', frame: frameData }))
+      return true
+    }
+    return false
+  }, [])
+
+  return { latestFrame, connect, disconnect, connectionStatus, errorMessage, sendFrame }
 }
