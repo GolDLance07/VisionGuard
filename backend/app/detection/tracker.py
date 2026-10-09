@@ -24,6 +24,16 @@ class Tracker:
         except Exception:
             self.pose_model = None
 
+        # Optional Custom Weapon Model: Auto-loads if fine-tuned weights exist
+        self.weapon_model = None
+        for wp in ("models/weapon_yolo.pt", "backend/models/weapon_yolo.pt", "experiments/runs/weapon_v1/weights/best.pt"):
+            if os.path.exists(wp):
+                try:
+                    self.weapon_model = YOLO(wp)
+                    break
+                except Exception:
+                    pass
+
         self.track_expiry = self.config.track_expiry_frames
         self._track_history: dict[int, int] = {}  # track_id -> frames_since_seen
         # Classification history per track ID: track_id -> list of (class_name, confidence)
@@ -109,6 +119,48 @@ class Tracker:
 
             # Reset age for seen tracks
             self._track_history[int(track_id)] = 0
+
+        # Supplementary Custom Weapon Model detections (if trained model available)
+        if self.weapon_model is not None:
+            try:
+                w_results = self.weapon_model(frame, conf=0.20, verbose=False)[0]
+                next_id = max(current_ids, default=100) + 1
+                for w_box in w_results.boxes:
+                    w_cls = int(w_box.cls[0])
+                    w_name = self.weapon_model.names[w_cls].lower()
+                    w_conf = float(w_box.conf[0])
+                    if "knife" in w_name:
+                        c_name = "knife"
+                    elif any(k in w_name for k in ("gun", "rifle", "pistol", "handgun", "0", "1", "2")):
+                        c_name = "gun"
+                    else:
+                        c_name = w_name
+
+                    wx1, wy1, wx2, wy2 = map(float, w_box.xyxy[0])
+                    matched = False
+                    for obj in objects:
+                        if obj.class_name in self.config.unsafe_classes:
+                            ix1 = max(wx1, obj.bbox.x1)
+                            iy1 = max(wy1, obj.bbox.y1)
+                            ix2 = min(wx2, obj.bbox.x2)
+                            iy2 = min(wy2, obj.bbox.y2)
+                            inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+                            union = max(1.0, (wx2 - wx1) * (wy2 - wy1) + (obj.bbox.x2 - obj.bbox.x1) * (obj.bbox.y2 - obj.bbox.y1) - inter)
+                            if (inter / union) > 0.35:
+                                matched = True
+                                obj.confidence = max(obj.confidence, w_conf)
+                                break
+                    if not matched:
+                        objects.append(DetectedObject(
+                            id=next_id,
+                            class_name=c_name,
+                            confidence=w_conf,
+                            bbox=BoundingBox(x1=wx1, y1=wy1, x2=wx2, y2=wy2),
+                            category=get_hazard_category(c_name),
+                        ))
+                        next_id += 1
+            except Exception:
+                pass
 
         # Mark holding associations between people and unsafe objects
         people = [o for o in objects if o.class_name == "person"]
